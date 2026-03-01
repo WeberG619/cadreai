@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CADRE·AI — Voice-Driven Professional Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --bg-panel: rgba(255,255,255,0.03);
+            --border: rgba(255,255,255,0.08);
+            --text: #e8e8ed;
+            --text-dim: #6b6b80;
+            --accent: #667eea;
+            --accent-glow: rgba(102,126,234,0.3);
+            --purple: #764ba2;
+            --red: #e74c3c;
+            --green: #2ecc71;
+            --amber: #f39c12;
+            --blue-bubble: #1a3a5c;
+            --dark-bubble: #1a1a2e;
+            --glass: rgba(255,255,255,0.04);
+            --glass-border: rgba(255,255,255,0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Top Bar ───────────────────────────────────────── */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-panel);
+            backdrop-filter: blur(20px);
+            flex-shrink: 0;
+            z-index: 10;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .brand h1 {
+            font-size: 1.3em;
+            font-weight: 700;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .brand .tagline {
+            font-size: 0.75em;
+            color: var(--text-dim);
+            font-weight: 300;
+        }
+        .status-badges {
+            display: flex;
+            gap: 10px;
+        }
+        .badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.72em;
+            font-weight: 500;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .badge .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .badge.connected .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .badge.enabled .dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+        .badge.disabled .dot { background: #444; }
+
+        /* ── Main Layout ───────────────────────────────────── */
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── Center: Conversation + Mic ────────────────────── */
+        .center-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .conversation {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .conversation::-webkit-scrollbar { width: 4px; }
+        .conversation::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .msg {
+            max-width: 75%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 0.9em;
+            line-height: 1.55;
+            word-wrap: break-word;
+            animation: msgIn 0.2s ease-out;
+        }
+        .msg-body {
+            display: flex;
+            flex-direction: column;
+        }
+        .msg-body img {
+            display: block;
+            margin-top: 8px;
+        }
+        @keyframes msgIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .msg.user {
+            align-self: flex-end;
+            background: var(--blue-bubble);
+            border: 1px solid rgba(102,126,234,0.2);
+            border-bottom-right-radius: 4px;
+        }
+        .msg.agent {
+            align-self: flex-start;
+            background: var(--dark-bubble);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+        .msg .label {
+            font-size: 0.65em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 3px;
+        }
+        .msg.user .label { color: var(--accent); }
+        .msg.agent .label { color: var(--purple); }
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-dim);
+            gap: 12px;
+        }
+        .empty-state svg { width: 48px; height: 48px; opacity: 0.3; fill: var(--text-dim); }
+        .empty-state p { font-size: 0.85em; }
+
+        /* ── Mic Bar (bottom of center) ────────────────────── */
+        .mic-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 16px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            flex-shrink: 0;
+        }
+        #micBtn {
+            width: 56px; height: 56px;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        #micBtn:hover {
+            background: rgba(102,126,234,0.1);
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
+        #micBtn.active {
+            background: var(--red);
+            border-color: var(--red);
+            color: white;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.3); }
+            50% { box-shadow: 0 0 0 16px rgba(231,76,60,0); }
+        }
+        #micBtn svg { width: 24px; height: 24px; fill: currentColor; }
+        .mic-status {
+            font-size: 0.8em;
+            color: var(--text-dim);
+            min-width: 160px;
+        }
+        /* Mini canvas next to mic */
+        #vizCanvas {
+            width: 120px;
+            height: 40px;
+        }
+
+        /* ── Right Panel: Tool Activity ────────────────────── */
+        .panel-right {
+            width: 300px;
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            flex-shrink: 0;
+        }
+        .panel-header {
+            padding: 14px 18px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border);
+        }
+        .tool-feed {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .tool-feed::-webkit-scrollbar { width: 4px; }
+        .tool-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .tool-item {
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            font-size: 0.8em;
+            animation: msgIn 0.2s ease-out;
+        }
+        .tool-item .tool-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        .tool-item .tool-icon { font-size: 1.1em; flex-shrink: 0; }
+        .tool-item .tool-name { font-weight: 600; font-size: 0.85em; }
+        .tool-item .tool-status { margin-left: auto; font-size: 0.75em; }
+        .tool-item .tool-detail {
+            font-size: 0.75em;
+            color: var(--text-dim);
+            margin-top: 4px;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+        .tool-item.running .tool-status { color: var(--amber); }
+        .tool-item.done .tool-status { color: var(--green); }
+        .spinner {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid var(--amber);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .no-tools {
+            color: var(--text-dim);
+            font-size: 0.8em;
+            text-align: center;
+            margin-top: 40px;
+        }
+
+        /* ── Mobile ──────────────────────────────────────────── */
+        @media (max-width: 768px) {
+            .main { flex-direction: column; }
+            .panel-right { width: 100%; height: 25vh; border-left: none; border-top: 1px solid var(--border); }
+            .msg { max-width: 95%; }
+            .media-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+            .media-card img { height: 180px; }
+        }
+        @media (max-width: 480px) {
+            .top-bar { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+            .brand h1 { font-size: 1.1em; }
+            .badge { font-size: 0.65em; padding: 4px 8px; }
+            #vizCanvas { display: none; }
+        }
+
+        /* ── Media Buttons (upload/screen/camera) ──────────── */
+        .media-btn {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            border: 1.5px solid var(--border);
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .media-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(102,126,234,0.08);
+        }
+        .media-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+        /* ── Drag & Drop Overlay ────────────────────────────── */
+        .drag-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(10,10,15,0.85);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
+            color: var(--accent);
+            font-size: 1.2em;
+            font-weight: 500;
+            border: 3px dashed var(--accent);
+            margin: 20px;
+            border-radius: 20px;
+        }
+        .drag-overlay.active { display: flex; }
+        .drag-overlay svg { width: 64px; height: 64px; fill: var(--accent); opacity: 0.6; }
+
+        /* ── Image & Video Cards in Chat ────────────────────── */
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 10px;
+            margin-top: 8px;
+            width: 100%;
+        }
+        .media-card {
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--glass);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .media-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        .media-card img {
+            width: 100%;
+            height: 240px;
+            object-fit: cover;
+            display: block;
+        }
+        .media-card .caption {
+            padding: 8px 12px;
+            font-size: 0.75em;
+            color: var(--text-dim);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+        }
+        .media-card iframe {
+            width: 100%;
+            height: 220px;
+            border: none;
+            display: block;
+        }
+        /* When msg contains a media-grid, allow it to be wider */
+        .msg:has(.media-grid) {
+            max-width: 90%;
+        }
+        .msg-image {
+            max-width: 400px;
+            max-height: 300px;
+            border-radius: 10px;
+            margin-top: 6px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .msg-image:hover { transform: scale(1.03); }
+        /* ── Lightbox (images) ──────────────────────────────── */
+        .lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            background: rgba(0,0,0,0.92);
+            align-items: center;
+            justify-content: center;
+            cursor: zoom-out;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+        }
+        /* ── Video Lightbox ─────────────────────────────────── */
+        .video-lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            background: rgba(0,0,0,0.95);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
+            cursor: pointer;
+        }
+        .video-lightbox.active { display: flex; }
+        .video-lightbox iframe {
+            width: 80vw;
+            height: 45vw;
+            max-width: 1280px;
+            max-height: 720px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+            box-shadow: 0 12px 60px rgba(0,0,0,0.6);
+        }
+        .video-lightbox .video-title {
+            color: var(--text);
+            font-size: 1em;
+            font-weight: 500;
+            max-width: 80vw;
+            text-align: center;
+        }
+        .video-lightbox .close-hint {
+            color: var(--text-dim);
+            font-size: 0.75em;
+            position: absolute;
+            top: 20px;
+            right: 24px;
+        }
+
+        /* ── Camera Modal ───────────────────────────────────── */
+        .camera-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(10,10,15,0.95);
+            backdrop-filter: blur(12px);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .camera-modal.active { display: flex; }
+        .camera-preview {
+            width: 480px;
+            max-width: 90vw;
+            border-radius: 12px;
+            border: 2px solid var(--border);
+            background: #000;
+        }
+        .camera-controls {
+            display: flex;
+            gap: 12px;
+        }
+        .camera-controls button {
+            padding: 10px 24px;
+            border-radius: 24px;
+            border: 1.5px solid var(--border);
+            background: var(--glass);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .camera-controls button:hover {
+            border-color: var(--accent);
+            background: rgba(102,126,234,0.1);
+        }
+        .camera-controls .capture-btn {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            font-weight: 600;
+        }
+        .camera-controls .capture-btn:hover {
+            background: var(--purple);
+            border-color: var(--purple);
+        }
+
+        /* ── Text Input ────────────────────────────────────── */
+        .text-input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            max-width: 480px;
+        }
+        #textInput {
+            flex: 1;
+            padding: 10px 16px;
+            border-radius: 24px;
+            border: 1.5px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.85em;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        #textInput::placeholder { color: var(--text-dim); }
+        #textInput:focus { border-color: var(--accent); }
+        #sendBtn {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: var(--accent);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        #sendBtn.ready { opacity: 1; pointer-events: auto; }
+        #sendBtn:hover { background: var(--purple); }
+        #sendBtn svg { width: 16px; height: 16px; fill: currentColor; }
+
+        /* ── Toast Notifications ────────────────────────────── */
+        .toast-container {
+            position: fixed;
+            bottom: 100px;
+            right: 24px;
+            z-index: 250;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            padding: 8px 16px;
+            border-radius: 10px;
+            background: rgba(30,30,50,0.95);
+            border: 1px solid var(--glass-border);
+            color: var(--text);
+            font-size: 0.78em;
+            font-weight: 500;
+            backdrop-filter: blur(10px);
+            animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toast .toast-icon { font-size: 1.1em; }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+
+        /* ── Keyboard Hint ──────────────────────────────────── */
+        .kbd-hint {
+            font-size: 0.65em;
+            color: var(--text-dim);
+            text-align: center;
+            padding: 4px 0 0;
+            opacity: 0.6;
+        }
+        .kbd-hint kbd {
+            background: rgba(255,255,255,0.08);
+            padding: 1px 6px;
+            border-radius: 3px;
+            border: 1px solid var(--border);
+            font-family: inherit;
+            font-size: 0.95em;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+    <div class="brand">
+        <h1>CADRE·AI</h1>
+        <span class="tagline">Voice-Driven Professional Agent</span>
+    </div>
+    <div class="status-badges">
+        <div class="badge disabled" id="badge-revit"><span class="dot"></span><span>&#127959; Revit</span></div>
+        <div class="badge disabled" id="badge-financial"><span class="dot"></span><span>&#128200; Financial</span></div>
+        <div class="badge disabled" id="badge-web"><span class="dot"></span><span>&#127760; Web</span></div>
+    </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+    <!-- Center: Conversation + Mic -->
+    <div class="center-col">
+        <div class="conversation" id="conversation">
+            <div class="empty-state" id="emptyState">
+                <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                <p>Click the mic to talk, or type a message below</p>
+            </div>
+        </div>
+        <div class="mic-bar">
+            <canvas id="vizCanvas" width="120" height="40"></canvas>
+            <input type="file" id="fileInput" accept="image/*,application/pdf" style="display:none" onchange="handleFileSelect(event)">
+            <button class="media-btn" onclick="document.getElementById('fileInput').click()" title="Upload image">
+                <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+            </button>
+            <button class="media-btn" onclick="captureScreen()" title="Share screen">
+                <svg viewBox="0 0 24 24"><path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></svg>
+            </button>
+            <button class="media-btn" onclick="openCamera()" title="Camera">
+                <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+            </button>
+            <div class="text-input-row">
+                <input type="text" id="textInput" placeholder="Type a message..." autocomplete="off">
+                <button id="sendBtn" onclick="sendTextMessage()" title="Send">
+                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
+            <button id="micBtn" onclick="toggleMic()">
+                <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            </button>
+            <div class="mic-status" id="micStatus">Click to connect</div>
+        </div>
+        <div class="kbd-hint"><kbd>Space</kbd> toggle mic &nbsp; <kbd>Enter</kbd> send text &nbsp; <kbd>Esc</kbd> close overlay</div>
+    </div>
+
+    <!-- Right Panel: Tool Activity -->
+    <div class="panel-right">
+        <div class="panel-header">Tool Activity</div>
+        <div class="tool-feed" id="toolFeed">
+            <div class="no-tools" id="noTools">Tools will appear here when called</div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Camera Modal -->
+<div class="camera-modal" id="cameraModal">
+    <video id="cameraPreview" class="camera-preview" autoplay playsinline></video>
+    <canvas id="cameraCanvas" style="display:none"></canvas>
+    <div class="camera-controls">
+        <button class="capture-btn" onclick="captureFrame()">Capture</button>
+        <button onclick="closeCamera()">Cancel</button>
+    </div>
+</div>
+
+<!-- Image Lightbox -->
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('active')">
+    <img id="lightboxImg" src="" alt="">
+</div>
+
+<!-- Video Lightbox -->
+<div class="video-lightbox" id="videoLightbox" onclick="closeVideoLightbox(event)">
+    <span class="close-hint">Click outside or press ESC to close</span>
+    <iframe id="videoLightboxFrame" src="" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>
+    <div class="video-title" id="videoLightboxTitle"></div>
+</div>
+
+<!-- Toast Notifications -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Drag & Drop Overlay -->
+<div class="drag-overlay" id="dragOverlay">
+    <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+    <span>Drop image here</span>
+</div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────
+const SERVER = window.location.port ? window.location.hostname + ':' + window.location.port : window.location.hostname;
+const APP_NAME = 'cadre';
+const USER_ID = 'user';
+
+let ws = null;
+let audioContext = null;
+let mediaStream = null;
+let scriptProcessor = null;
+let isRecording = false;
+let sessionId = null;
+let playbackQueue = [];
+let isPlaying = false;
+let analyser = null;
+let vizAnimId = null;
+
+// Track whether audio mode is active (receiving inlineData)
+let audioMode = false;
+
+const runningTools = new Map();
+
+// ── Status Polling ──────────────────────────────────────────
+async function pollStatus() {
+    try {
+        const scheme = window.location.protocol === 'https:' ? 'https' : 'http';
+        const resp = await fetch(`${scheme}://${SERVER}/status`);
+        const st = await resp.json();
+        setBadge('badge-revit', st.revit);
+        setBadge('badge-financial', st.financial);
+        setBadge('badge-web', st.web_search);
+    } catch {
+        setBadge('badge-revit', {enabled:false,connected:false});
+        setBadge('badge-financial', {enabled:false,connected:false});
+        setBadge('badge-web', {enabled:false,connected:false});
+    }
+}
+function setBadge(id, s) {
+    const el = document.getElementById(id);
+    el.className = 'badge ' + (s.connected ? 'connected' : s.enabled ? 'enabled' : 'disabled');
+}
+pollStatus();
+setInterval(pollStatus, 5000);
+
+// Edge TTS is server-side — no browser voice preloading needed
+
+// ── Conversation ─────────────────────────────────────────────
+
+let userLiveBubble = null;
+let agentLiveBubble = null;
+let userTranscriptBuffer = '';
+let userTranscriptTimer = null;
+let agentTranscriptBuffer = '';
+let agentTranscriptTimer = null;
+let lastFinalizedUserText = '';
+let lastFinalizedAgentText = '';
+let agentTurnHasAudio = false;   // Did Gemini send audio this turn?
+let audioChunksReceived = 0;
+
+function ensureEmptyStateRemoved() {
+    const e = document.getElementById('emptyState');
+    if (e) e.remove();
+}
+
+function createBubble(type) {
+    ensureEmptyStateRemoved();
+    const conv = document.getElementById('conversation');
+    const div = document.createElement('div');
+    div.className = `msg ${type}`;
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = type === 'user' ? 'You' : 'Cadre';
+    div.appendChild(label);
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+    div.appendChild(body);
+    conv.appendChild(div);
+    conv.scrollTop = conv.scrollHeight;
+    return div;
+}
+
+function updateBubbleText(bubble, text, rich) {
+    if (!bubble) return;
+    const b = bubble.querySelector('.msg-body');
+    if (b) {
+        if (rich) {
+            b.innerHTML = renderRichText(text);
+        } else {
+            b.textContent = text;
+        }
+    }
+    const c = document.getElementById('conversation'); c.scrollTop = c.scrollHeight;
+}
+
+// ── User transcript ──────────────────────────────────────────
+function appendUserTranscript(chunk) {
+    if (!chunk || !chunk.trim()) return;
+
+    if (!userLiveBubble) {
+        // Duplicate guard: skip if this matches last finalized user text
+        const test = (userTranscriptBuffer + chunk).trim();
+        if (lastFinalizedUserText && isSimilar(test, lastFinalizedUserText)) return;
+        userLiveBubble = createBubble('user');
+    }
+
+    // Detect cumulative vs incremental transcription:
+    // If the new chunk STARTS with what we already have, it's cumulative → replace
+    const wouldBe = userTranscriptBuffer + chunk;
+    if (chunk.length > userTranscriptBuffer.length && chunk.trim().startsWith(userTranscriptBuffer.trim())) {
+        userTranscriptBuffer = chunk; // cumulative: use the longer version
+    } else {
+        userTranscriptBuffer = wouldBe; // incremental: append
+    }
+
+    // Detect repeated content (same text sent twice)
+    const trimmed = userTranscriptBuffer.trim();
+    userTranscriptBuffer = deduplicateRepeatedText(trimmed);
+
+    updateBubbleText(userLiveBubble, userTranscriptBuffer.trim());
+
+    if (userTranscriptTimer) clearTimeout(userTranscriptTimer);
+    userTranscriptTimer = setTimeout(flushUserTranscript, 1200);
+}
+
+function flushUserTranscript() {
+    if (userTranscriptBuffer.trim()) {
+        lastFinalizedUserText = userTranscriptBuffer.trim();
+    }
+    userLiveBubble = null;
+    userTranscriptBuffer = '';
+    userTranscriptTimer = null;
+}
+
+// ── Agent transcript ─────────────────────────────────────────
+function appendAgentTranscript(chunk) {
+    if (!chunk || !chunk.trim()) return;
+
+    if (!agentLiveBubble) {
+        if (userLiveBubble) flushUserTranscript();
+        const test = (agentTranscriptBuffer + chunk).trim();
+        if (lastFinalizedAgentText && isSimilar(test, lastFinalizedAgentText)) return;
+        agentLiveBubble = createBubble('agent');
+        agentTurnHasAudio = false; // reset for this turn
+    }
+
+    // Same cumulative vs incremental detection
+    if (chunk.length > agentTranscriptBuffer.length && chunk.trim().startsWith(agentTranscriptBuffer.trim())) {
+        agentTranscriptBuffer = chunk;
+    } else {
+        agentTranscriptBuffer += chunk;
+    }
+
+    agentTranscriptBuffer = deduplicateRepeatedText(agentTranscriptBuffer.trim());
+    updateBubbleText(agentLiveBubble, agentTranscriptBuffer.trim(), true);
+
+    if (agentTranscriptTimer) clearTimeout(agentTranscriptTimer);
+    agentTranscriptTimer = setTimeout(flushAgentTranscript, 1000);
+}
+
+function flushAgentTranscript() {
+    const text = agentTranscriptBuffer.trim();
+    if (text) {
+        lastFinalizedAgentText = text;
+        // TTS is handled server-side — audio pushed via _cadre_tts WebSocket events
+    }
+    agentLiveBubble = null;
+    agentTranscriptBuffer = '';
+    agentTranscriptTimer = null;
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+
+// Check if two strings are essentially the same (exact match after normalization)
+function isSimilar(a, b) {
+    if (!a || !b) return false;
+    const na = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const nb = b.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return na === nb;
+}
+
+// Detect and remove text that repeats itself: "Hello worldHello world" → "Hello world"
+function deduplicateRepeatedText(text) {
+    if (!text || text.length < 10) return text;
+    const len = text.length;
+    // Check if the second half is the same as the first half (with minor length differences)
+    for (let mid = Math.floor(len * 0.4); mid <= Math.ceil(len * 0.6); mid++) {
+        const first = text.slice(0, mid).trim();
+        const second = text.slice(mid).trim();
+        if (first && second && first === second) return first;
+    }
+    return text;
+}
+
+// ── Rich Text Rendering (agent bubbles) ─────────────────────
+function renderRichText(text) {
+    if (!text) return '';
+    // Escape HTML entities
+    let h = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Markdown images: ![alt](url) — use data-lightbox for safe URL handling
+    h = h.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, function(_, alt, url) {
+        return '<img class="msg-image" src="' + url + '" alt="' + alt + '" data-lightbox="' + url.replace(/"/g, '&quot;') + '" onerror="this.style.display=\'none\'">';
+    });
+    // Markdown links: [text](url) — restrict URL chars to prevent attribute injection
+    h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^)"' ]+)\)/g,
+        '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">$1</a>');
+    // Bare image URLs → inline images (only if not already inside a tag attribute)
+    h = h.replace(/(?<!="|='|=)(https?:\/\/[^\s"'<]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s"'<]*)?)/gi, function(_, url) {
+        return '<img class="msg-image" src="' + url + '" data-lightbox="' + url.replace(/"/g, '&quot;') + '" onerror="this.style.display=\'none\'">';
+    });
+    // YouTube URLs → embedded video player
+    h = h.replace(/(?<!="|='|=)(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})[^\s<]*)/gi,
+        '<div style="margin:8px 0"><iframe width="400" height="225" src="https://www.youtube.com/embed/$2" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen style="border-radius:8px;border:1px solid var(--border)"></iframe></div>');
+    // Bold: **text**
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Inline code: `text`
+    h = h.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.1);padding:2px 5px;border-radius:3px;font-size:0.85em">$1</code>');
+    // Newlines
+    h = h.replace(/\n/g, '<br>');
+    return h;
+}
+
+// ── Edge TTS Playback (audio pushed from server via WebSocket) ──
+let ttsAudio = null;
+let isSpeaking = false; // true while TTS plays (mutes mic send to prevent echo)
+
+let ttsBlobUrl = null;  // Track blob URL for cleanup
+
+function playEdgeTTS(base64Audio) {
+    // Stop any currently playing TTS and clean up blob URL
+    if (ttsAudio) {
+        ttsAudio.pause();
+        ttsAudio.onended = null;
+        ttsAudio.onerror = null;
+        ttsAudio = null;
+    }
+    if (ttsBlobUrl) {
+        URL.revokeObjectURL(ttsBlobUrl);
+        ttsBlobUrl = null;
+    }
+
+    // Convert base64 to blob URL
+    const binary = atob(base64Audio);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'audio/mpeg' });
+    ttsBlobUrl = URL.createObjectURL(blob);
+
+    ttsAudio = new Audio(ttsBlobUrl);
+    isSpeaking = true;
+    document.getElementById('micStatus').textContent = 'Cadre is speaking...';
+
+    ttsAudio.onended = () => {
+        if (ttsBlobUrl) { URL.revokeObjectURL(ttsBlobUrl); ttsBlobUrl = null; }
+        ttsAudio = null;
+        isSpeaking = false;
+        if (isRecording) {
+            document.getElementById('micStatus').textContent = 'Listening...';
+        }
+    };
+    ttsAudio.onerror = (e) => {
+        console.error('[cadre] TTS playback error:', e);
+        if (ttsBlobUrl) { URL.revokeObjectURL(ttsBlobUrl); ttsBlobUrl = null; }
+        ttsAudio = null;
+        isSpeaking = false;
+        if (isRecording) {
+            document.getElementById('micStatus').textContent = 'Listening...';
+        }
+    };
+    ttsAudio.play().catch(e => {
+        console.error('[cadre] TTS play() rejected:', e);
+        isSpeaking = false;
+    });
+}
+
+// ── Tool Activity ────────────────────────────────────────────
+const DOMAIN_ICONS = { revit:'\u{1F3D7}', financial:'\u{1F4C8}', web:'\u{1F310}' };
+
+function addToolCall(name, domain, args) {
+    const feed = document.getElementById('toolFeed');
+    const noTools = document.getElementById('noTools');
+    if (noTools) noTools.remove();
+    const div = document.createElement('div');
+    div.className = 'tool-item running';
+    const icon = DOMAIN_ICONS[domain] || '\u{1F527}';
+    // Build DOM safely (no innerHTML with user-controlled data)
+    const header = document.createElement('div');
+    header.className = 'tool-header';
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'tool-icon';
+    iconSpan.textContent = icon;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'tool-name';
+    nameSpan.textContent = name;
+    const statusSpan = document.createElement('span');
+    statusSpan.className = 'tool-status';
+    statusSpan.innerHTML = '<span class="spinner"></span>';
+    header.appendChild(iconSpan);
+    header.appendChild(nameSpan);
+    header.appendChild(statusSpan);
+    const detail = document.createElement('div');
+    detail.className = 'tool-detail';
+    detail.textContent = formatArgs(args);
+    div.appendChild(header);
+    div.appendChild(detail);
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+    runningTools.set(name, { startTime: Date.now(), element: div });
+}
+
+function completeToolCall(name) {
+    const info = runningTools.get(name);
+    if (!info) return;
+    const elapsed = ((Date.now() - info.startTime) / 1000).toFixed(1);
+    info.element.className = 'tool-item done';
+    info.element.querySelector('.tool-status').innerHTML = `\u2713 ${elapsed}s`;
+    runningTools.delete(name);
+    // Toast notification
+    const friendly = name.replace(/_/g, ' ').replace(/^get /, '');
+    showToast(friendly + ' \u2014 ' + elapsed + 's', '\u2705');
+}
+
+function formatArgs(args) {
+    if (!args || Object.keys(args).length === 0) return '';
+    return Object.entries(args).slice(0, 3).map(([k, v]) => {
+        const val = typeof v === 'string' ? v : JSON.stringify(v);
+        return k + ': ' + (val.length > 40 ? val.slice(0, 40) + '...' : val);
+    }).join(' \u00b7 ');
+}
+
+// ── Audio ────────────────────────────────────────────────────
+function float32ToInt16(f32) {
+    const i16 = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+        let s = Math.max(-1, Math.min(1, f32[i]));
+        i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return i16;
+}
+function resample(data, from, to) {
+    if (from === to) return data;
+    const ratio = from / to;
+    const len = Math.round(data.length / ratio);
+    const out = new Float32Array(len);
+    for (let i = 0; i < len; i++) {
+        const srcIdx = i * ratio;
+        const lo = Math.floor(srcIdx);
+        const hi = Math.min(lo + 1, data.length - 1);
+        const frac = srcIdx - lo;
+        out[i] = data[lo] * (1 - frac) + data[hi] * frac;  // linear interpolation
+    }
+    return out;
+}
+
+async function startAudio() {
+    audioContext = new AudioContext({ sampleRate: 48000 });
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 64;
+    source.connect(analyser);
+    scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+    scriptProcessor.onaudioprocess = (e) => {
+        if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+        // Don't send mic audio while TTS is playing (prevents echo feedback)
+        if (isSpeaking) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const resampled = resample(input, 48000, 16000);
+        const i16 = float32ToInt16(resampled);
+        const bytes = new Uint8Array(i16.buffer);
+        let binaryStr = '';
+        const chunk = 8192;
+        for (let j = 0; j < bytes.length; j += chunk) {
+            binaryStr += String.fromCharCode.apply(null, bytes.subarray(j, j + chunk));
+        }
+        const b64 = btoa(binaryStr);
+        ws.send(JSON.stringify({ blob: { data: b64, mime_type: "audio/pcm;rate=16000" } }));
+    };
+    source.connect(scriptProcessor);
+    scriptProcessor.connect(audioContext.destination);
+}
+
+function playAudioChunk(b64) {
+    playbackQueue.push(b64);
+    if (!isPlaying) processPlaybackQueue();
+}
+async function processPlaybackQueue() {
+    if (playbackQueue.length === 0) { isPlaying = false; return; }
+    isPlaying = true;
+    try {
+        // Ensure AudioContext is active (browsers suspend without user gesture)
+        if (audioContext.state === 'suspended') {
+            console.log('[cadre] Resuming suspended AudioContext');
+            await audioContext.resume();
+        }
+        const b64 = playbackQueue.shift();
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+        // Decode as Int16 PCM → Float32
+        const i16 = new Int16Array(bytes.buffer);
+        const f32 = new Float32Array(i16.length);
+        for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768.0;
+
+        if (f32.length === 0) {
+            console.warn('[cadre] Empty audio buffer, skipping');
+            processPlaybackQueue();
+            return;
+        }
+
+        // Create playback buffer at 24kHz (Gemini native audio output rate)
+        const buf = audioContext.createBuffer(1, f32.length, 24000);
+        buf.getChannelData(0).set(f32);
+        const src = audioContext.createBufferSource();
+        src.buffer = buf;
+        src.connect(audioContext.destination);
+        src.onended = () => processPlaybackQueue();
+        src.start();
+        console.log(`[cadre] Playing ${f32.length} samples (${(f32.length/24000).toFixed(2)}s) | queue: ${playbackQueue.length} | ctx: ${audioContext.state}`);
+    } catch (e) {
+        console.error('[cadre] Playback error:', e);
+        processPlaybackQueue(); // Continue with next chunk
+    }
+}
+
+// ── Visualizer (horizontal waveform bar) ─────────────────────
+function drawVisualizer() {
+    const canvas = document.getElementById('vizCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const bars = 24;
+    const barW = (W / bars) - 2;
+    let dataArray;
+    if (analyser && isRecording) {
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+    } else {
+        dataArray = new Uint8Array(bars);
+        const t = Date.now() / 1000;
+        for (let i = 0; i < bars; i++) dataArray[i] = 10 + 8 * Math.sin(t * 1.2 + i * 0.5);
+    }
+    for (let i = 0; i < bars; i++) {
+        const val = dataArray[i % dataArray.length] / 255;
+        const barH = Math.max(2, val * H * 0.8);
+        const x = i * (barW + 2);
+        const y = (H - barH) / 2;
+        ctx.fillStyle = isRecording
+            ? `rgba(102, 126, 234, ${0.3 + val * 0.7})`
+            : `rgba(102, 126, 234, ${0.1 + val * 0.15})`;
+        ctx.fillRect(x, y, barW, barH);
+    }
+    vizAnimId = requestAnimationFrame(drawVisualizer);
+}
+drawVisualizer();
+
+// ── Session ──────────────────────────────────────────────────
+async function createSession() {
+    const scheme = window.location.protocol === 'https:' ? 'https' : 'http';
+    const resp = await fetch(`${scheme}://${SERVER}/apps/${APP_NAME}/users/${USER_ID}/sessions`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}'
+    });
+    const data = await resp.json();
+    sessionId = data.id;
+    return sessionId;
+}
+
+// ── WebSocket ────────────────────────────────────────────────
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${protocol}://${SERVER}/run_live?app_name=${APP_NAME}&user_id=${USER_ID}&session_id=${sessionId}`);
+
+    ws.onopen = () => {
+        document.getElementById('micStatus').textContent = 'Connected — speak now';
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+
+            // ── Edge TTS audio from server ──
+            if (data._cadre_tts && data._cadre_tts.audio) {
+                console.log('[cadre] Edge TTS received:', data._cadre_tts.text);
+                playEdgeTTS(data._cadre_tts.audio);
+            }
+
+            // Tool calls (enriched by server)
+            if (data._cadre_event === 'tool_call' && data._cadre_tool) {
+                addToolCall(data._cadre_tool.name, data._cadre_tool.domain, data._cadre_tool.args);
+            }
+            if (data._cadre_event === 'tool_response' && data._cadre_tool) {
+                completeToolCall(data._cadre_tool.name);
+            }
+
+            // Auto-display images extracted from tool responses
+            if (data._cadre_images && data._cadre_images.length > 0) {
+                displayImages(data._cadre_images);
+            }
+
+            // Auto-display videos extracted from tool responses
+            if (data._cadre_videos && data._cadre_videos.length > 0) {
+                displayVideos(data._cadre_videos);
+            }
+
+            // Gemini native audio + text parts
+            if (data.content && data.content.parts) {
+                for (const part of data.content.parts) {
+                    if (part.inlineData && part.inlineData.data) {
+                        audioMode = true;
+                        playAudioChunk(part.inlineData.data);
+                    }
+                    // Agent text parts (may contain markdown, URLs, images)
+                    if (part.text && !data.outputTranscription) {
+                        appendAgentTranscript(part.text);
+                    }
+                }
+            }
+
+            // Output transcription: what the agent said (text version of audio)
+            // Streams token-by-token — buffer into a single live bubble
+            if (data.outputTranscription) {
+                const text = typeof data.outputTranscription === 'string'
+                    ? data.outputTranscription
+                    : data.outputTranscription.text || '';
+                if (text.trim()) appendAgentTranscript(text);
+            }
+
+            // Input transcription: what the user said
+            // Streams word-by-word — buffer into a single live bubble
+            if (data.inputTranscription) {
+                const text = typeof data.inputTranscription === 'string'
+                    ? data.inputTranscription
+                    : data.inputTranscription.text || '';
+                if (text.trim()) appendUserTranscript(text);
+            }
+
+        } catch (e) { console.error('[cadre] Parse error:', e); }
+    };
+
+    ws.onerror = () => {
+        document.getElementById('micStatus').textContent = 'Connection error';
+    };
+    ws.onclose = (ev) => {
+        document.getElementById('micStatus').textContent = ev.code === 1000 ? 'Disconnected' : `Disconnected (${ev.code})`;
+        isRecording = false;
+        document.getElementById('micBtn').classList.remove('active');
+    };
+}
+
+// ── Mic Toggle ───────────────────────────────────────────────
+async function toggleMic() {
+    const btn = document.getElementById('micBtn');
+    if (!isRecording) {
+        try {
+            document.getElementById('micStatus').textContent = 'Connecting...';
+            // Always create a fresh session — old session's LiveRequestQueue is dead after disconnect
+            await createSession();
+            if (!audioContext) await startAudio();
+            // Close any stale WebSocket before opening a new one
+            if (ws) {
+                ws.onclose = null;  // prevent the onclose handler from firing
+                ws.onerror = null;
+                ws.close();
+                ws = null;
+            }
+            connectWebSocket();
+            isRecording = true;
+            audioMode = false;
+            btn.classList.add('active');
+            document.getElementById('micStatus').textContent = 'Listening...';
+        } catch (e) {
+            document.getElementById('micStatus').textContent = 'Error: ' + e.message;
+        }
+    } else {
+        isRecording = false;
+        btn.classList.remove('active');
+        flushUserTranscript();
+        flushAgentTranscript();
+        // Clean up TTS playback
+        if (ttsAudio) {
+            ttsAudio.pause();
+            ttsAudio.onended = null;
+            ttsAudio.onerror = null;
+            ttsAudio = null;
+        }
+        if (ttsBlobUrl) { URL.revokeObjectURL(ttsBlobUrl); ttsBlobUrl = null; }
+        isSpeaking = false;
+        playbackQueue = [];
+        isPlaying = false;
+        // Clean up audio resources (stops mic LED in browser)
+        if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
+        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        if (audioContext) { audioContext.close(); audioContext = null; }
+        analyser = null;
+        if (ws) { ws.close(); ws = null; }
+        sessionId = null;  // Force fresh session on next connect
+        document.getElementById('micStatus').textContent = 'Stopped — click to reconnect';
+    }
+}
+
+// ── Text Input ───────────────────────────────────────────────
+async function sendTextMessage() {
+    const input = document.getElementById('textInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    // Auto-connect if not connected yet
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        try {
+            document.getElementById('micStatus').textContent = 'Connecting...';
+            await createSession();  // Always fresh session
+            // Don't start audio/mic for text-only — just need WebSocket
+            if (ws) { ws.onclose = null; ws.onerror = null; ws.close(); ws = null; }
+            connectWebSocket();
+            // Wait for connection to open
+            await new Promise(function(resolve, reject) {
+                var checkInterval = setInterval(function() {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    } else if (ws && ws.readyState === WebSocket.CLOSED) {
+                        clearInterval(checkInterval);
+                        reject(new Error('Connection failed'));
+                    }
+                }, 100);
+                setTimeout(function() { clearInterval(checkInterval); reject(new Error('Timeout')); }, 5000);
+            });
+        } catch (e) {
+            showToast('Connection failed: ' + e.message, '\u26a0\ufe0f');
+            return;
+        }
+    }
+
+    // Show user bubble
+    ensureEmptyStateRemoved();
+    if (userLiveBubble) flushUserTranscript();
+    const bubble = createBubble('user');
+    updateBubbleText(bubble, text);
+    lastFinalizedUserText = text;
+
+    // Send as text content via LiveRequest
+    ws.send(JSON.stringify({
+        content: {
+            role: "user",
+            parts: [{ text: text }]
+        }
+    }));
+
+    input.value = '';
+    document.getElementById('sendBtn').classList.remove('ready');
+    console.log('[cadre] Sent text: ' + text);
+}
+
+// Enable/disable send button based on input content
+document.getElementById('textInput').addEventListener('input', function() {
+    const btn = document.getElementById('sendBtn');
+    if (this.value.trim()) {
+        btn.classList.add('ready');
+    } else {
+        btn.classList.remove('ready');
+    }
+});
+
+// Enter key sends text
+document.getElementById('textInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendTextMessage();
+    }
+});
+
+// ── Keyboard Shortcuts ──────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+    // Don't trigger shortcuts when typing in text input
+    if (document.activeElement === document.getElementById('textInput')) return;
+
+    // Space bar: toggle mic
+    if (e.code === 'Space' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        toggleMic();
+    }
+});
+
+// ── Toast Notifications ─────────────────────────────────────────
+function showToast(message, icon) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    if (icon) {
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'toast-icon';
+        iconSpan.textContent = icon;
+        toast.appendChild(iconSpan);
+    }
+    toast.appendChild(document.createTextNode(message));
+    container.appendChild(toast);
+    setTimeout(function() { toast.remove(); }, 3000);
+}
+
+// ── Auto-display images from tool responses ─────────────────────
+function displayImages(images) {
+    ensureEmptyStateRemoved();
+    if (agentLiveBubble) flushAgentTranscript();
+    var bubble = createBubble('agent');
+    var body = bubble.querySelector('.msg-body');
+    var grid = document.createElement('div');
+    grid.className = 'media-grid';
+    images.forEach(function(img) {
+        var url = typeof img === 'string' ? img : img.url;
+        var title = typeof img === 'string' ? '' : (img.title || '');
+        var card = document.createElement('div');
+        card.className = 'media-card';
+        card.dataset.url = url;
+        card.onclick = function() { openLightbox(this.dataset.url); };
+        var imgEl = document.createElement('img');
+        imgEl.src = url;
+        imgEl.alt = title;
+        imgEl.loading = 'lazy';
+        imgEl.onerror = function() { this.parentElement.style.display = 'none'; };
+        card.appendChild(imgEl);
+        if (title) {
+            var cap = document.createElement('div');
+            cap.className = 'caption';
+            cap.textContent = title;
+            card.appendChild(cap);
+        }
+        grid.appendChild(card);
+    });
+    body.appendChild(grid);
+    var conv = document.getElementById('conversation');
+    conv.scrollTop = conv.scrollHeight;
+}
+
+function openLightbox(url) {
+    var lb = document.getElementById('lightbox');
+    document.getElementById('lightboxImg').src = url;
+    lb.classList.add('active');
+}
+
+// Delegated click handler for data-lightbox images (safe URL handling)
+document.addEventListener('click', function(e) {
+    var target = e.target.closest('[data-lightbox]');
+    if (target) {
+        e.preventDefault();
+        openLightbox(target.dataset.lightbox);
+    }
+});
+
+function openVideoLightbox(embedUrl, title) {
+    var vl = document.getElementById('videoLightbox');
+    var frame = document.getElementById('videoLightboxFrame');
+    var titleEl = document.getElementById('videoLightboxTitle');
+    // Add autoplay to embed URL
+    var url = embedUrl + (embedUrl.includes('?') ? '&' : '?') + 'autoplay=1';
+    frame.src = url;
+    titleEl.textContent = title || '';
+    vl.classList.add('active');
+}
+
+function closeVideoLightbox(event) {
+    // Don't close if clicking the iframe itself
+    if (event && event.target.tagName === 'IFRAME') return;
+    var vl = document.getElementById('videoLightbox');
+    vl.classList.remove('active');
+    // Stop video by clearing src
+    document.getElementById('videoLightboxFrame').src = '';
+}
+
+// ESC key closes both lightboxes
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('lightbox').classList.remove('active');
+        closeVideoLightbox(null);
+    }
+});
+
+// ── Auto-display videos from tool responses ─────────────────────
+function displayVideos(videos) {
+    ensureEmptyStateRemoved();
+    if (agentLiveBubble) flushAgentTranscript();
+    var bubble = createBubble('agent');
+    var body = bubble.querySelector('.msg-body');
+    var grid = document.createElement('div');
+    grid.className = 'media-grid';
+    videos.forEach(function(v) {
+        var card = document.createElement('div');
+        card.className = 'media-card';
+        // Show thumbnail preview with play button overlay instead of inline iframe
+        var thumb = document.createElement('div');
+        thumb.style.cssText = 'position:relative;cursor:pointer;';
+        // YouTube thumbnail from embed URL
+        var videoId = (v.embed_url.match(/embed\/([^?/]+)/) || [])[1] || '';
+        var thumbImg = document.createElement('img');
+        thumbImg.src = videoId ? 'https://img.youtube.com/vi/' + videoId + '/hqdefault.jpg' : '';
+        thumbImg.alt = v.title || 'Video';
+        thumbImg.loading = 'lazy';
+        thumbImg.onerror = function() {
+            // Fallback: show iframe if thumbnail fails
+            this.parentElement.innerHTML = '<iframe src="' + v.embed_url + '" style="width:100%;height:220px;border:none;" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>';
+        };
+        thumb.appendChild(thumbImg);
+        // Play button overlay
+        var playBtn = document.createElement('div');
+        playBtn.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:rgba(0,0,0,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;';
+        playBtn.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>';
+        thumb.appendChild(playBtn);
+        // Click to open video lightbox
+        thumb.onclick = function() { openVideoLightbox(v.embed_url, v.title || ''); };
+        card.appendChild(thumb);
+        if (v.title) {
+            var cap = document.createElement('div');
+            cap.className = 'caption';
+            cap.textContent = v.title + (v.channel ? ' — ' + v.channel : '');
+            card.appendChild(cap);
+        }
+        grid.appendChild(card);
+    });
+    body.appendChild(grid);
+    var conv = document.getElementById('conversation');
+    conv.scrollTop = conv.scrollHeight;
+}
+
+// ── Multimodal: Image Handling ──────────────────────────────────
+
+function resizeImage(dataUrl, maxSize) {
+    maxSize = maxSize || 1024;
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) {
+                const scale = maxSize / Math.max(w, h);
+                w = Math.round(w * scale);
+                h = Math.round(h * scale);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = dataUrl;
+    });
+}
+
+function sendImageBlob(base64Data, mimeType) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast('Not connected — click the mic first', '\u26a0\ufe0f');
+        return;
+    }
+    const raw = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    ws.send(JSON.stringify({
+        blob: { data: raw, mime_type: mimeType }
+    }));
+    console.log('[cadre] Sent image: ' + mimeType + ', ' + Math.round(raw.length * 0.75 / 1024) + 'KB');
+}
+
+function addImageToConversation(dataUrl) {
+    ensureEmptyStateRemoved();
+    if (userLiveBubble) flushUserTranscript();
+    const bubble = createBubble('user');
+    const body = bubble.querySelector('.msg-body');
+    body.textContent = '';
+    const img = document.createElement('img');
+    img.className = 'msg-image';
+    img.src = dataUrl;
+    img.onclick = function() { openLightbox(dataUrl); };
+    body.appendChild(img);
+    lastFinalizedUserText = '[image]';
+}
+
+async function processAndSendImage(file) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const dataUrl = e.target.result;
+        const mime = file.type || 'image/jpeg';
+        if (mime.startsWith('image/')) {
+            const resized = await resizeImage(dataUrl, 1024);
+            addImageToConversation(resized);
+            sendImageBlob(resized, 'image/jpeg');
+        } else {
+            // PDF or other — send raw base64
+            addImageToConversation(dataUrl);
+            const raw = dataUrl.split(',')[1];
+            sendImageBlob(raw, mime);
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+// ── File Input Handler ────────────────────────────────────────
+function handleFileSelect(event) {
+    const files = event.target.files;
+    if (files.length > 0) processAndSendImage(files[0]);
+    event.target.value = '';
+}
+
+// ── Drag & Drop ───────────────────────────────────────────────
+let dragCounter = 0;
+
+document.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    document.getElementById('dragOverlay').classList.add('active');
+});
+
+document.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+        dragCounter = 0;
+        document.getElementById('dragOverlay').classList.remove('active');
+    }
+});
+
+document.addEventListener('dragover', (e) => e.preventDefault());
+
+document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    document.getElementById('dragOverlay').classList.remove('active');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+            processAndSendImage(file);
+        }
+    }
+});
+
+// ── Clipboard Paste (Ctrl+V) ──────────────────────────────────
+document.addEventListener('paste', (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+            e.preventDefault();
+            const file = items[i].getAsFile();
+            if (file) processAndSendImage(file);
+            return;
+        }
+    }
+});
+
+// ── Camera ────────────────────────────────────────────────────
+let cameraStream = null;
+
+async function openCamera() {
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 } }
+        });
+        const video = document.getElementById('cameraPreview');
+        video.srcObject = cameraStream;
+        document.getElementById('cameraModal').classList.add('active');
+    } catch (err) {
+        alert('Camera access denied: ' + err.message);
+    }
+}
+
+function captureFrame() {
+    const video = document.getElementById('cameraPreview');
+    const canvas = document.getElementById('cameraCanvas');
+    const scale = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    addImageToConversation(dataUrl);
+    sendImageBlob(dataUrl, 'image/jpeg');
+    closeCamera();
+}
+
+function closeCamera() {
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(function(t) { t.stop(); });
+        cameraStream = null;
+    }
+    document.getElementById('cameraPreview').srcObject = null;
+    document.getElementById('cameraModal').classList.remove('active');
+}
+
+// ── Screen Capture ────────────────────────────────────────────
+async function captureScreen() {
+    try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.autoplay = true;
+        await new Promise(function(resolve) { video.onloadedmetadata = resolve; });
+        await video.play();
+        // Brief delay to ensure first frame renders
+        await new Promise(function(resolve) { setTimeout(resolve, 200); });
+
+        const scale = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        stream.getTracks().forEach(function(t) { t.stop(); });
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        addImageToConversation(dataUrl);
+        sendImageBlob(dataUrl, 'image/jpeg');
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            console.error('[cadre] Screen capture error:', err);
+        }
+    }
+}
+</script>
+</body>
+</html>

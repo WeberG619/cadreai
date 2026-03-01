@@ -1,0 +1,11 @@
+.env
+cert.pem
+key.pem
+*.db
+*.pyc
+__pycache__/
+.ruff_cache/
+.adk/
+venv/
+.venv/
+*.egg-info/

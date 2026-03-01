@@ -1,0 +1,15 @@
+.env
+cert.pem
+key.pem
+.git/
+__pycache__/
+*.pyc
+.adk/
+.ruff_cache/
+venv/
+.venv/
+revit_proxy_mcp/
+cloud/
+*.md
+*.db
+LICENSE
