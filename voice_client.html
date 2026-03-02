@@ -104,6 +104,7 @@
             display: flex;
             flex-direction: column;
             min-width: 0;
+            position: relative;
         }
         .conversation {
             flex: 1;
@@ -212,6 +213,13 @@
             background: var(--glass);
             border: 1px solid var(--glass-border);
             color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .empty-state .cap-tag:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(102,126,234,0.08);
         }
 
         /* ── Mic Bar (bottom of center) ────────────────────── */
@@ -650,6 +658,98 @@
             font-family: inherit;
             font-size: 0.95em;
         }
+
+        /* ── Message Copy Button ───────────────────────────── */
+        .msg-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .msg-copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+            background: var(--bg);
+            color: var(--text-dim);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all 0.2s;
+            padding: 0;
+            z-index: 5;
+        }
+        .msg-wrapper:hover .msg-copy-btn {
+            opacity: 1;
+        }
+        .msg-copy-btn:hover {
+            color: var(--accent);
+            border-color: var(--accent);
+            background: rgba(102,126,234,0.1);
+        }
+        .msg-copy-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+        }
+
+        /* ── Scroll to Bottom ──────────────────────────────── */
+        #scrollToBottomBtn {
+            position: absolute;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1px solid var(--glass-border);
+            background: var(--bg);
+            color: var(--text-dim);
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 15;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        #scrollToBottomBtn:hover {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        #scrollToBottomBtn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* ── Stop Generation ───────────────────────────────── */
+        #stopGenBtn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1.5px solid var(--red);
+            background: transparent;
+            color: var(--red);
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.25s ease;
+        }
+        #stopGenBtn:hover {
+            background: rgba(231,76,60,0.15);
+        }
+        #stopGenBtn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
     </style>
 </head>
 <body>
@@ -681,15 +781,18 @@
                 <h2>Ready to assist</h2>
                 <p>Click the mic to talk, type a message, or drop an image to get started</p>
                 <div class="capabilities">
-                    <span class="cap-tag">Voice Chat</span>
-                    <span class="cap-tag">Image Analysis</span>
-                    <span class="cap-tag">Financial Data</span>
-                    <span class="cap-tag">Web Search</span>
-                    <span class="cap-tag">Screen Capture</span>
+                    <span class="cap-tag" onclick="submitSuggestion(this)">Give me a market overview</span>
+                    <span class="cap-tag" onclick="submitSuggestion(this)">What's the latest AI news?</span>
+                    <span class="cap-tag" onclick="submitSuggestion(this)">Analyze my screen</span>
+                    <span class="cap-tag" onclick="submitSuggestion(this)">Show me a stock chart for NVDA</span>
+                    <span class="cap-tag" onclick="submitSuggestion(this)">What can you do?</span>
                 </div>
             </div>
             </div>
         </div>
+        <button id="scrollToBottomBtn" onclick="scrollToBottom()" title="Scroll to bottom">
+            <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+        </button>
         <div class="mic-bar">
             <canvas id="vizCanvas" width="120" height="40"></canvas>
             <input type="file" id="fileInput" accept="image/*,application/pdf" style="display:none" onchange="handleFileSelect(event)">
@@ -701,6 +804,9 @@
             </button>
             <button class="media-btn" onclick="openCamera()" title="Camera">
                 <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+            </button>
+            <button id="stopGenBtn" onclick="stopGeneration()" title="Stop generating">
+                <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
             </button>
             <div class="text-input-row">
                 <input type="text" id="textInput" placeholder="Type a message..." autocomplete="off">
@@ -825,6 +931,8 @@ function createBubble(type) {
     ensureEmptyStateRemoved();
     const inner = document.getElementById('conversationInner');
     const conv = document.getElementById('conversation');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'msg-wrapper';
     const div = document.createElement('div');
     div.className = `msg ${type}`;
     const label = document.createElement('div');
@@ -834,8 +942,15 @@ function createBubble(type) {
     const body = document.createElement('div');
     body.className = 'msg-body';
     div.appendChild(body);
-    inner.appendChild(div);
-    conv.scrollTop = conv.scrollHeight;
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-copy-btn';
+    copyBtn.title = 'Copy';
+    copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
+    copyBtn.onclick = function() { copyMessage(copyBtn); };
+    wrapper.appendChild(div);
+    wrapper.appendChild(copyBtn);
+    inner.appendChild(wrapper);
+    if (autoScrollEnabled) conv.scrollTop = conv.scrollHeight;
     return div;
 }
 
@@ -849,7 +964,9 @@ function updateBubbleText(bubble, text, rich) {
             b.textContent = text;
         }
     }
-    const c = document.getElementById('conversation'); c.scrollTop = c.scrollHeight;
+    if (autoScrollEnabled) {
+        const c = document.getElementById('conversation'); c.scrollTop = c.scrollHeight;
+    }
 }
 
 // ── User transcript ──────────────────────────────────────────
@@ -901,6 +1018,7 @@ function appendAgentTranscript(chunk) {
         if (lastFinalizedAgentText && isSimilar(test, lastFinalizedAgentText)) return;
         agentLiveBubble = createBubble('agent');
         agentTurnHasAudio = false; // reset for this turn
+        setGenerating(true);
     }
 
     // Same cumulative vs incremental detection
@@ -926,6 +1044,7 @@ function flushAgentTranscript() {
     agentLiveBubble = null;
     agentTranscriptBuffer = '';
     agentTranscriptTimer = null;
+    setGenerating(false);
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -1306,6 +1425,7 @@ function connectWebSocket() {
         document.getElementById('micStatus').textContent = ev.code === 1000 ? 'Disconnected' : `Disconnected (${ev.code})`;
         isRecording = false;
         document.getElementById('micBtn').classList.remove('active');
+        setGenerating(false);
     };
 }
 
@@ -1489,8 +1609,10 @@ function displayImages(images) {
         grid.appendChild(card);
     });
     body.appendChild(grid);
-    var conv = document.getElementById('conversation');
-    conv.scrollTop = conv.scrollHeight;
+    if (autoScrollEnabled) {
+        var conv = document.getElementById('conversation');
+        conv.scrollTop = conv.scrollHeight;
+    }
 }
 
 function openLightbox(url) {
@@ -1578,8 +1700,10 @@ function displayVideos(videos) {
         grid.appendChild(card);
     });
     body.appendChild(grid);
-    var conv = document.getElementById('conversation');
-    conv.scrollTop = conv.scrollHeight;
+    if (autoScrollEnabled) {
+        var conv = document.getElementById('conversation');
+        conv.scrollTop = conv.scrollHeight;
+    }
 }
 
 // ── Multimodal: Image Handling ──────────────────────────────────
@@ -1774,6 +1898,83 @@ async function captureScreen() {
             console.error('[cadre] Screen capture error:', err);
         }
     }
+}
+// ── Auto-Scroll Control ─────────────────────────────────────────
+let autoScrollEnabled = true;
+
+(function setupAutoScroll() {
+    var conv = document.getElementById('conversation');
+    conv.addEventListener('scroll', function() {
+        var atBottom = conv.scrollHeight - conv.scrollTop - conv.clientHeight < 80;
+        autoScrollEnabled = atBottom;
+        document.getElementById('scrollToBottomBtn').style.display = atBottom ? 'none' : 'flex';
+    });
+})();
+
+function scrollToBottom() {
+    var conv = document.getElementById('conversation');
+    conv.scrollTo({ top: conv.scrollHeight, behavior: 'smooth' });
+    autoScrollEnabled = true;
+    document.getElementById('scrollToBottomBtn').style.display = 'none';
+}
+
+// ── Copy Message ────────────────────────────────────────────────
+function copyMessage(btn) {
+    var wrapper = btn.closest('.msg-wrapper');
+    var body = wrapper.querySelector('.msg-body');
+    if (!body) return;
+    var text = body.textContent || body.innerText;
+    navigator.clipboard.writeText(text).then(function() {
+        showToast('Copied to clipboard', '\u{1F4CB}');
+        btn.style.color = 'var(--green)';
+        setTimeout(function() { btn.style.color = ''; }, 1000);
+    }).catch(function() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        showToast('Copied to clipboard', '\u{1F4CB}');
+    });
+}
+
+// ── Suggested Prompts ───────────────────────────────────────────
+function submitSuggestion(el) {
+    var text = el.textContent;
+    document.getElementById('textInput').value = text;
+    document.getElementById('sendBtn').classList.add('ready');
+    sendTextMessage();
+}
+
+// ── Stop Generation ─────────────────────────────────────────────
+let isGenerating = false;
+
+function setGenerating(val) {
+    isGenerating = val;
+    document.getElementById('stopGenBtn').style.display = val ? 'flex' : 'none';
+}
+
+function stopGeneration() {
+    if (ws) {
+        ws.onclose = null;
+        ws.close();
+        ws = null;
+    }
+    if (ttsAudio) {
+        ttsAudio.pause();
+        ttsAudio.onended = null;
+        ttsAudio.onerror = null;
+        ttsAudio = null;
+    }
+    if (ttsBlobUrl) { URL.revokeObjectURL(ttsBlobUrl); ttsBlobUrl = null; }
+    isSpeaking = false;
+    playbackQueue = [];
+    isPlaying = false;
+    if (agentLiveBubble) flushAgentTranscript();
+    setGenerating(false);
+    document.getElementById('micStatus').textContent = 'Generation stopped';
 }
 </script>
 </body>
