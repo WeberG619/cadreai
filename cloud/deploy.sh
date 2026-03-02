@@ -58,7 +58,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --session-affinity \
     --min-instances 0 \
     --max-instances 3 \
-    --set-env-vars "GOOGLE_API_KEY=$API_KEY,REVIT_ENABLED=false,CADRE_MODEL=$MODEL,PORT=8080"
+    --set-env-vars "GOOGLE_API_KEY=$API_KEY,REVIT_ENABLED=false,CADRE_MODEL=$MODEL"
 
 # Get the service URL
 echo ""
