@@ -1262,7 +1262,8 @@ function connectWebSocket() {
                         playAudioChunk(part.inlineData.data);
                     }
                     // Agent text parts (may contain markdown, URLs, images)
-                    if (part.text && !data.outputTranscription) {
+                    // Skip if in audio mode — outputTranscription is the canonical text source
+                    if (part.text && !data.outputTranscription && !audioMode) {
                         appendAgentTranscript(part.text);
                     }
                 }
@@ -1280,6 +1281,7 @@ function connectWebSocket() {
             // Input transcription: what the user said
             // Streams word-by-word — buffer into a single live bubble
             if (data.inputTranscription) {
+                audioMode = false; // New user turn — reset audio mode
                 const text = typeof data.inputTranscription === 'string'
                     ? data.inputTranscription
                     : data.inputTranscription.text || '';
