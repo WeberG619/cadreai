@@ -221,7 +221,29 @@ def _enrich_event(data: dict) -> dict:
                             "data_uri": data_uri_match.group(1),
                             "prompt": re.search(r'"prompt"\s*:\s*"([^"]*)"', resp_str).group(1) if re.search(r'"prompt"\s*:\s*"([^"]*)"', resp_str) else "",
                         }
-                else:
+                # Extract citation sources from research/search tools
+                if tool_name in ("web_search", "deep_research", "search_papers", "wikipedia_lookup"):
+                    sources = []
+                    if tool_name in ("web_search", "deep_research"):
+                        titles = re.findall(r'"title"\s*:\s*"([^"]*)"', resp_str)
+                        urls = re.findall(r'"(?:url|link)"\s*:\s*"(https?://[^"]+)"', resp_str)
+                        for i in range(min(len(titles), len(urls))):
+                            sources.append({"num": i + 1, "title": titles[i], "url": urls[i], "type": "web"})
+                    elif tool_name == "search_papers":
+                        titles = re.findall(r'"title"\s*:\s*"([^"]*)"', resp_str)
+                        urls = re.findall(r'"(?:pdf_url|url|link)"\s*:\s*"(https?://[^"]+)"', resp_str)
+                        for i in range(min(len(titles), len(urls))):
+                            sources.append({"num": i + 1, "title": titles[i], "url": urls[i], "type": "paper"})
+                    elif tool_name == "wikipedia_lookup":
+                        titles = re.findall(r'"title"\s*:\s*"([^"]*)"', resp_str)
+                        urls = re.findall(r'"(?:url|link)"\s*:\s*"(https?://[^"]+)"', resp_str)
+                        for i in range(min(len(titles), len(urls))):
+                            sources.append({"num": i + 1, "title": titles[i], "url": urls[i], "type": "wiki"})
+                    if sources:
+                        data["_cadre_sources"] = sources[:10]
+
+                if tool_name not in ("web_search", "deep_research", "search_papers", "wikipedia_lookup",
+                                     "image_search", "video_search", "generate_image"):
                     # Generic: extract any image URLs from other tool responses
                     img_urls = re.findall(
                         r'https?://[^\s"\'\\,\]}>]+\.(?:jpg|jpeg|png|gif|webp|svg|JPG|JPEG|PNG)(?:\?[^\s"\'\\,\]}>]*)?',
@@ -270,6 +292,8 @@ async def run_live(
 
     def clean_for_tts(text: str) -> str:
         """Strip URLs, file paths, and markdown syntax — keep only speakable text."""
+        # Remove suggestion tags
+        text = re.sub(r'\[SUGGESTIONS:.*?\]', '', text)
         # Remove markdown image syntax: ![alt](url) → alt
         text = re.sub(r'!\[([^\]]*)\]\([^)]+\)', r'\1', text)
         # Remove markdown links: [text](url) → text
@@ -361,6 +385,17 @@ async def run_live(
                 async with tts_lock:
                     text = transcript_buffer.strip()
                     transcript_buffer = ""
+
+                    # Parse and strip suggestion chips before TTS
+                    suggestion_match = re.search(r'\[SUGGESTIONS:\s*(.+?)\]', text)
+                    if suggestion_match:
+                        suggestions = [s.strip() for s in suggestion_match.group(1).split('|')]
+                        text = text[:suggestion_match.start()].strip()
+                        try:
+                            await websocket.send_text(json.dumps({"_cadre_suggestions": suggestions}))
+                        except Exception:
+                            pass
+
                     if text and not is_already_spoken(text):
                         last_spoken_text = text
                         all_spoken_texts.append(text)
@@ -494,6 +529,14 @@ async def run_live(
 
                     if event_types:
                         print(f"[event] {' | '.join(event_types)}", flush=True)
+
+                    # Strip suggestion tags from outputTranscription before sending to client
+                    if "outputTranscription" in data:
+                        ot = data["outputTranscription"]
+                        if isinstance(ot, str):
+                            data["outputTranscription"] = re.sub(r'\[SUGGESTIONS:.*?\]', '', ot).rstrip()
+                        elif isinstance(ot, dict) and "text" in ot:
+                            ot["text"] = re.sub(r'\[SUGGESTIONS:.*?\]', '', ot["text"]).rstrip()
 
                     # Enrich with Cadre metadata for UI
                     data = _enrich_event(data)

@@ -345,6 +345,61 @@
             margin-top: 40px;
         }
 
+        /* ── Suggestion Chips ─────────────────────────────────── */
+        .suggestions-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .suggestions-row .chip {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .suggestions-row .chip:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(102,126,234,0.08);
+        }
+
+        /* ── Sources Panel ────────────────────────────────────── */
+        .sources-panel { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+        .sources-toggle { cursor: pointer; font-size: 0.75em; color: var(--text-dim); display: flex; align-items: center; gap: 4px; user-select: none; }
+        .sources-toggle:hover { color: var(--accent); }
+        .sources-toggle .chevron { transition: transform 0.2s; display: inline-block; }
+        .sources-toggle .chevron.open { transform: rotate(90deg); }
+        .sources-list { display: none; margin-top: 6px; font-size: 0.75em; }
+        .sources-list.open { display: block; }
+        .source-item { padding: 3px 0; }
+        .source-item a { color: var(--accent); text-decoration: none; }
+        .source-item a:hover { text-decoration: underline; }
+        .source-badge { display: inline-block; font-size: 0.65em; padding: 1px 5px; border-radius: 8px; margin-left: 6px; }
+        .source-badge.web { background: rgba(102,126,234,0.15); color: var(--accent); }
+        .source-badge.paper { background: rgba(46,204,113,0.15); color: var(--green); }
+        .source-badge.wiki { background: rgba(243,156,18,0.15); color: var(--amber); }
+
+        /* ── Pipeline Visualization ───────────────────────────── */
+        .pipeline { padding: 12px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; margin-bottom: 8px; animation: msgIn 0.2s ease-out; }
+        .pipeline-header { font-size: 0.8em; font-weight: 600; margin-bottom: 8px; }
+        .pipeline-steps { display: flex; flex-direction: column; gap: 2px; }
+        .pipeline-step { display: flex; align-items: center; gap: 8px; padding: 6px 0; position: relative; }
+        .step-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+        .pipeline-step.running .step-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation: pipelinePulse 1.5s infinite; }
+        .pipeline-step.done .step-dot { background: var(--green); }
+        .step-connector { position: absolute; left: 4px; top: 22px; width: 2px; height: calc(100% - 10px); background: var(--border); }
+        .pipeline-step:last-child .step-connector { display: none; }
+        .step-info { display: flex; align-items: center; gap: 6px; font-size: 0.78em; }
+        .step-time { margin-left: auto; font-size: 0.9em; color: var(--text-dim); }
+        .pipeline-summary { font-size: 0.7em; color: var(--text-dim); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+        .pipeline.completed .pipeline-header { color: var(--green); }
+        @keyframes pipelinePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
         /* ── Mobile ──────────────────────────────────────────── */
         @media (max-width: 768px) {
             .main { flex-direction: column; }
@@ -891,6 +946,15 @@ let audioMode = false;
 
 const runningTools = new Map();
 
+// ── Sources tracking (per agent turn) ───────────────────────
+let currentTurnSources = [];
+
+// ── Pipeline tracking ───────────────────────────────────────
+let toolPipeline = [];      // [{name, domain, status, startTime, endTime}]
+let pipelineElement = null;
+let pipelineStartTime = 0;
+let lastPipelineToolTime = 0;
+
 // ── Status Polling ──────────────────────────────────────────
 async function pollStatus() {
     try {
@@ -1029,6 +1093,7 @@ function appendAgentTranscript(chunk) {
         if (lastFinalizedAgentText && isSimilar(test, lastFinalizedAgentText)) return;
         agentLiveBubble = createBubble('agent');
         agentTurnHasAudio = false; // reset for this turn
+        currentTurnSources = []; // reset sources for new turn
         setGenerating(true);
     }
 
@@ -1059,14 +1124,95 @@ function appendAgentTranscript(chunk) {
 
 function flushAgentTranscript() {
     const text = agentTranscriptBuffer.trim();
+    const bubble = agentLiveBubble;
     if (text) {
         lastFinalizedAgentText = text;
         // TTS is handled server-side — audio pushed via _cadre_tts WebSocket events
     }
+    // Append sources panel if we accumulated any during this turn
+    if (bubble && currentTurnSources.length > 0) {
+        renderSourcesPanel(bubble, currentTurnSources.slice());
+    }
+    currentTurnSources = [];
     agentLiveBubble = null;
     agentTranscriptBuffer = '';
     agentTranscriptTimer = null;
     setGenerating(false);
+}
+
+function displaySuggestions(suggestions) {
+    // Remove any previous suggestion rows
+    document.querySelectorAll('.suggestions-row').forEach(el => el.remove());
+    // Find the last agent bubble
+    const msgs = document.querySelectorAll('.msg.agent');
+    const lastAgent = msgs[msgs.length - 1];
+    if (!lastAgent) return;
+    const row = document.createElement('div');
+    row.className = 'suggestions-row';
+    suggestions.forEach(text => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = text;
+        chip.onclick = function() { submitSuggestion(this); };
+        row.appendChild(chip);
+    });
+    // Insert after the msg-body inside the agent bubble
+    const body = lastAgent.querySelector('.msg-body');
+    if (body && body.nextSibling) {
+        lastAgent.insertBefore(row, body.nextSibling);
+    } else {
+        lastAgent.appendChild(row);
+    }
+    if (autoScrollEnabled) {
+        const conv = document.getElementById('conversation');
+        conv.scrollTop = conv.scrollHeight;
+    }
+}
+
+function renderSourcesPanel(bubble, sources) {
+    if (!sources || sources.length === 0) return;
+    const panel = document.createElement('div');
+    panel.className = 'sources-panel';
+    const toggle = document.createElement('div');
+    toggle.className = 'sources-toggle';
+    const chevron = document.createElement('span');
+    chevron.className = 'chevron';
+    chevron.textContent = '\u25b6';
+    toggle.appendChild(chevron);
+    toggle.appendChild(document.createTextNode(' Sources (' + sources.length + ')'));
+    const list = document.createElement('div');
+    list.className = 'sources-list';
+    sources.forEach(src => {
+        const item = document.createElement('div');
+        item.className = 'source-item';
+        const numSpan = document.createTextNode('[' + src.num + '] ');
+        item.appendChild(numSpan);
+        const link = document.createElement('a');
+        link.href = src.url;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = src.title || src.url;
+        item.appendChild(link);
+        // Domain
+        try {
+            const domain = new URL(src.url).hostname.replace('www.', '');
+            item.appendChild(document.createTextNode(' \u2014 ' + domain));
+        } catch(e) {}
+        // Badge
+        const badge = document.createElement('span');
+        badge.className = 'source-badge ' + (src.type || 'web');
+        badge.textContent = src.type || 'web';
+        item.appendChild(badge);
+        list.appendChild(item);
+    });
+    toggle.onclick = function() {
+        list.classList.toggle('open');
+        chevron.classList.toggle('open');
+    };
+    panel.appendChild(toggle);
+    panel.appendChild(list);
+    const body = bubble.querySelector('.msg-body');
+    if (body) body.after(panel);
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -1180,41 +1326,107 @@ function addToolCall(name, domain, args) {
     const feed = document.getElementById('toolFeed');
     const noTools = document.getElementById('noTools');
     if (noTools) noTools.remove();
-    const div = document.createElement('div');
-    div.className = 'tool-item running';
+
+    const now = Date.now();
     const icon = DOMAIN_ICONS[domain] || '\u{1F527}';
-    // Build DOM safely (no innerHTML with user-controlled data)
-    const header = document.createElement('div');
-    header.className = 'tool-header';
+
+    // Decide: join existing pipeline or start new one
+    const joinPipeline = pipelineElement && (now - lastPipelineToolTime < 3000);
+
+    if (!joinPipeline) {
+        // Start a new pipeline
+        toolPipeline = [];
+        pipelineStartTime = now;
+        pipelineElement = document.createElement('div');
+        pipelineElement.className = 'pipeline';
+        const hdr = document.createElement('div');
+        hdr.className = 'pipeline-header';
+        hdr.textContent = 'Working on it...';
+        const steps = document.createElement('div');
+        steps.className = 'pipeline-steps';
+        const summary = document.createElement('div');
+        summary.className = 'pipeline-summary';
+        summary.textContent = 'Step 1';
+        pipelineElement.appendChild(hdr);
+        pipelineElement.appendChild(steps);
+        pipelineElement.appendChild(summary);
+        feed.appendChild(pipelineElement);
+    }
+
+    lastPipelineToolTime = now;
+    const stepInfo = { name, domain, status: 'running', startTime: now, endTime: null };
+    toolPipeline.push(stepInfo);
+
+    // Create step element
+    const step = document.createElement('div');
+    step.className = 'pipeline-step running';
+    step.dataset.toolName = name;
+    const dot = document.createElement('div');
+    dot.className = 'step-dot';
+    const connector = document.createElement('div');
+    connector.className = 'step-connector';
+    const info = document.createElement('div');
+    info.className = 'step-info';
     const iconSpan = document.createElement('span');
-    iconSpan.className = 'tool-icon';
     iconSpan.textContent = icon;
     const nameSpan = document.createElement('span');
-    nameSpan.className = 'tool-name';
-    nameSpan.textContent = name;
-    const statusSpan = document.createElement('span');
-    statusSpan.className = 'tool-status';
-    statusSpan.innerHTML = '<span class="spinner"></span>';
-    header.appendChild(iconSpan);
-    header.appendChild(nameSpan);
-    header.appendChild(statusSpan);
-    const detail = document.createElement('div');
-    detail.className = 'tool-detail';
-    detail.textContent = formatArgs(args);
-    div.appendChild(header);
-    div.appendChild(detail);
-    feed.appendChild(div);
+    nameSpan.textContent = name.replace(/_/g, ' ');
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'step-time';
+    timeSpan.innerHTML = '<span class="spinner"></span>';
+    info.appendChild(iconSpan);
+    info.appendChild(nameSpan);
+    info.appendChild(timeSpan);
+    step.appendChild(dot);
+    step.appendChild(connector);
+    step.appendChild(info);
+
+    const stepsContainer = pipelineElement.querySelector('.pipeline-steps');
+    stepsContainer.appendChild(step);
+
+    // Update summary
+    const totalSteps = toolPipeline.length;
+    const doneSteps = toolPipeline.filter(s => s.status === 'done').length;
+    const elapsed = ((now - pipelineStartTime) / 1000).toFixed(1);
+    pipelineElement.querySelector('.pipeline-summary').textContent =
+        `Step ${doneSteps + 1}/${totalSteps} \u00b7 ${elapsed}s`;
+
     feed.scrollTop = feed.scrollHeight;
-    runningTools.set(name, { startTime: Date.now(), element: div });
+    runningTools.set(name, { startTime: now, element: step, pipelineInfo: stepInfo });
 }
 
 function completeToolCall(name) {
     const info = runningTools.get(name);
     if (!info) return;
-    const elapsed = ((Date.now() - info.startTime) / 1000).toFixed(1);
-    info.element.className = 'tool-item done';
-    info.element.querySelector('.tool-status').innerHTML = `\u2713 ${elapsed}s`;
+    const now = Date.now();
+    const elapsed = ((now - info.startTime) / 1000).toFixed(1);
+
+    // Update step element
+    info.element.className = 'pipeline-step done';
+    info.element.querySelector('.step-time').textContent = '\u2713 ' + elapsed + 's';
+    info.pipelineInfo.status = 'done';
+    info.pipelineInfo.endTime = now;
     runningTools.delete(name);
+
+    // Update pipeline summary
+    if (pipelineElement) {
+        const totalSteps = toolPipeline.length;
+        const doneSteps = toolPipeline.filter(s => s.status === 'done').length;
+        const totalElapsed = ((now - pipelineStartTime) / 1000).toFixed(1);
+
+        if (doneSteps === totalSteps) {
+            // All done
+            pipelineElement.classList.add('completed');
+            pipelineElement.querySelector('.pipeline-header').textContent =
+                'Completed in ' + totalElapsed + 's';
+            pipelineElement.querySelector('.pipeline-summary').textContent =
+                totalSteps + ' step' + (totalSteps > 1 ? 's' : '') + ' \u00b7 ' + totalElapsed + 's total';
+        } else {
+            pipelineElement.querySelector('.pipeline-summary').textContent =
+                'Step ' + (doneSteps + 1) + '/' + totalSteps + ' \u00b7 ' + totalElapsed + 's';
+        }
+    }
+
     // Toast notification
     const friendly = name.replace(/_/g, ' ').replace(/^get /, '');
     showToast(friendly + ' \u2014 ' + elapsed + 's', '\u2705');
@@ -1484,6 +1696,18 @@ function connectWebSocket() {
             // Auto-display videos extracted from tool responses
             if (data._cadre_videos && data._cadre_videos.length > 0) {
                 displayVideos(data._cadre_videos);
+            }
+
+            // Suggestion chips from server
+            if (data._cadre_suggestions && data._cadre_suggestions.length > 0) {
+                displaySuggestions(data._cadre_suggestions);
+            }
+
+            // Citation sources from tool responses
+            if (data._cadre_sources && data._cadre_sources.length > 0) {
+                currentTurnSources = currentTurnSources.concat(data._cadre_sources);
+                // Re-number sequentially
+                currentTurnSources.forEach((s, i) => { s.num = i + 1; });
             }
 
             // Skip audio/text processing if interrupted

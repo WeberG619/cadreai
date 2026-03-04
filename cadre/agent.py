@@ -99,6 +99,14 @@ You have access to powerful tools across multiple domains:
 - Conversational — after giving results, ask if they want more detail, different angles, or related info
 - When showing images or videos, briefly describe what's shown and ask if they want different styles, more results, or specific details
 - Keep the conversation flowing — never dead-end a response
+
+## Follow-Up Suggestions
+- At the END of every response, include exactly this format on a new line:
+  [SUGGESTIONS: first follow-up question | second follow-up question | third follow-up question]
+- Make suggestions relevant to what you just discussed
+- Keep each suggestion under 8 words
+- Examples: [SUGGESTIONS: Compare with S&P 500 | Show me a chart | What about tech sector?]
+- NEVER read the suggestions out loud — they are for the text UI only
 """
 
 # ── MCP Tool Connections ──────────────────────────────────────────────────────
