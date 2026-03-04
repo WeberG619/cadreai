@@ -1474,11 +1474,42 @@ async function startAudio() {
     analyser.fftSize = 64;
     source.connect(analyser);
     scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+    let speechFrameCount = 0; // consecutive frames above threshold
+    const SPEECH_THRESHOLD = 0.015; // RMS energy threshold for speech detection
+    const SPEECH_FRAMES_NEEDED = 3; // consecutive frames to confirm speech
+
     scriptProcessor.onaudioprocess = (e) => {
         if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
-        // Don't send mic audio while TTS is playing (prevents echo feedback)
-        if (isSpeaking) return;
         const input = e.inputBuffer.getChannelData(0);
+
+        // While audio is playing (TTS or native), detect if user is speaking (voice interrupt)
+        if (isSpeaking || isPlaying) {
+            // Calculate RMS energy
+            let sum = 0;
+            for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+            const rms = Math.sqrt(sum / input.length);
+
+            if (rms > SPEECH_THRESHOLD) {
+                speechFrameCount++;
+                if (speechFrameCount >= SPEECH_FRAMES_NEEDED) {
+                    // User is speaking — interrupt TTS and agent
+                    console.log('[cadre] Voice interrupt detected (RMS: ' + rms.toFixed(4) + ')');
+                    stopAllAudio();
+                    interrupted = true;
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({"activity_start": {}}));
+                    }
+                    setGenerating(false);
+                    document.getElementById('micStatus').textContent = 'Listening...';
+                    speechFrameCount = 0;
+                }
+            } else {
+                speechFrameCount = 0;
+            }
+            return; // Don't send audio while TTS plays (prevents echo)
+        }
+
+        speechFrameCount = 0;
         const resampled = resample(input, 48000, 16000);
         const i16 = float32ToInt16(resampled);
         const bytes = new Uint8Array(i16.buffer);
