@@ -21,8 +21,9 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from google.adk.runners import Runner, RunConfig
 from google.adk.agents.live_request_queue import LiveRequestQueue, LiveRequest
-from google.adk.sessions import InMemorySessionService
+from google.adk.sessions import DatabaseSessionService
 from google.genai import types
+from google.genai.types import RealtimeInputConfig, ActivityHandling
 
 EDGE_TTS_VOICE = os.environ.get("CADRE_TTS_VOICE", "en-US-AndrewNeural")
 
@@ -32,7 +33,10 @@ load_dotenv()
 from cadre.agent import root_agent, REVIT_ENABLED
 
 app = FastAPI(title="Cadre-AI")
-session_service = InMemorySessionService()
+
+# Persistent session storage — survives restarts and reconnects
+_db_path = Path(__file__).parent / "cadre_sessions.db"
+session_service = DatabaseSessionService(db_url=f"sqlite:///{_db_path}")
 runner = Runner(
     agent=root_agent,
     app_name="cadre",
@@ -122,6 +126,32 @@ async def create_session(app_name: str, user_id: str):
     return {"id": session.id}
 
 
+@app.get("/apps/{app_name}/users/{user_id}/sessions/{session_id}")
+async def get_session(app_name: str, user_id: str, session_id: str):
+    """Check if a session exists and is resumable."""
+    try:
+        session = await session_service.get_session(
+            app_name=app_name, user_id=user_id, session_id=session_id
+        )
+        if session:
+            return {"id": session.id, "exists": True}
+        return JSONResponse({"exists": False}, status_code=404)
+    except Exception:
+        return JSONResponse({"exists": False}, status_code=404)
+
+
+@app.get("/apps/{app_name}/users/{user_id}/sessions")
+async def list_sessions(app_name: str, user_id: str):
+    """List recent sessions for this user."""
+    try:
+        sessions = await session_service.list_sessions(
+            app_name=app_name, user_id=user_id
+        )
+        return {"sessions": [{"id": s.id} for s in (sessions or [])]}
+    except Exception:
+        return {"sessions": []}
+
+
 def _enrich_event(data: dict) -> dict:
     """Add _cadre metadata to tool call/response events for the UI."""
     if "content" not in data or not data["content"] or "parts" not in data["content"]:
@@ -182,6 +212,14 @@ def _enrich_event(data: dict) -> dict:
                             }
                             for i in range(min(len(embeds), 4))
                         ]
+                elif tool_name == "generate_image":
+                    # Extract base64 generated image
+                    data_uri_match = re.search(r'"data_uri"\s*:\s*"(data:image/[^"]+)"', resp_str)
+                    if data_uri_match:
+                        data["_cadre_generated_image"] = {
+                            "data_uri": data_uri_match.group(1),
+                            "prompt": re.search(r'"prompt"\s*:\s*"([^"]*)"', resp_str).group(1) if re.search(r'"prompt"\s*:\s*"([^"]*)"', resp_str) else "",
+                        }
                 else:
                     # Generic: extract any image URLs from other tool responses
                     img_urls = re.findall(
@@ -215,6 +253,13 @@ async def run_live(
             while True:
                 raw = await websocket.receive_text()
                 try:
+                    # Check for activity_start (soft interrupt from client)
+                    msg = json.loads(raw)
+                    if "activity_start" in msg:
+                        print("[upstream] Client sent activity_start (soft interrupt)", flush=True)
+                        # Forward as a LiveRequest with activity_start
+                        live_queue.send(LiveRequest.model_validate({"activity_start": {}}))
+                        continue
                     live_queue.send(LiveRequest.model_validate_json(raw))
                 except Exception as e:
                     print(f"[upstream] Parse error: {e}", flush=True)
@@ -340,6 +385,9 @@ async def run_live(
                     ),
                     output_audio_transcription=types.AudioTranscriptionConfig(),
                     input_audio_transcription=types.AudioTranscriptionConfig(),
+                    realtime_input_config=RealtimeInputConfig(
+                        activityHandling=ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+                    ),
                 ),
             ):
                 try:
@@ -405,6 +453,21 @@ async def run_live(
                                     flush_task.cancel()
                                 flush_task = asyncio.create_task(delayed_flush())
                             event_types.append(f"OUT_T:{ct[:40]}")
+
+                    # Detect server-side interruption
+                    if data.get("serverContent", {}).get("interrupted", False):
+                        print("[event] INTERRUPTED by client", flush=True)
+                        # Cancel pending TTS flush
+                        if flush_task and not flush_task.done():
+                            flush_task.cancel()
+                            flush_task = None
+                        transcript_buffer = ""
+                        has_native_audio = False
+                        # Notify client
+                        try:
+                            await websocket.send_text(json.dumps({"_cadre_event": "interrupted"}))
+                        except Exception:
+                            pass
 
                     if "inputTranscription" in data:
                         it = data["inputTranscription"]
