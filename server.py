@@ -194,22 +194,35 @@ def _enrich_event(data: dict) -> dict:
                 resp_obj = fn.get("response", {})
                 resp_str = json.dumps(resp_obj) if isinstance(resp_obj, dict) else str(resp_obj)
                 if tool_name == "image_search":
-                    # Parse JSON properly instead of regex (fixes first-call rendering)
+                    # ADK/MCP wraps responses as:
+                    # {"content":[{"type":"text","text":"{json_with_images}"}],"isError":false}
                     images_list = []
                     if isinstance(resp_obj, dict):
-                        # Direct dict response — try "images" key first
+                        # Level 1: Direct "images" key
                         images_list = resp_obj.get("images", [])
-                        # ADK may wrap in {"text": "json_string"} — parse inner JSON
+                        # Level 2: ADK {"text": "json_string"} wrapper
                         if not images_list and "text" in resp_obj:
                             try:
                                 inner = json.loads(resp_obj["text"])
                                 images_list = inner.get("images", [])
                             except (json.JSONDecodeError, TypeError):
                                 pass
-                    # Fallback: regex extraction
+                        # Level 3: MCP {"content":[{"type":"text","text":"json"}]} wrapper
+                        if not images_list and "content" in resp_obj:
+                            for part in (resp_obj.get("content") or []):
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    try:
+                                        inner = json.loads(part["text"])
+                                        images_list = inner.get("images", [])
+                                        if images_list:
+                                            break
+                                    except (json.JSONDecodeError, TypeError):
+                                        pass
+                    # Fallback: regex on the raw string (unescape first)
                     if not images_list:
-                        urls = re.findall(r'"image_url"\s*:\s*"([^"]+)"', resp_str)
-                        titles = re.findall(r'"title"\s*:\s*"([^"]*)"', resp_str)
+                        raw_str = resp_str.replace('\\"', '"').replace('\\\\', '\\')
+                        urls = re.findall(r'"image_url"\s*:\s*"([^"]+)"', raw_str)
+                        titles = re.findall(r'"title"\s*:\s*"([^"]*)"', raw_str)
                         if urls:
                             images_list = [
                                 {"image_url": urls[i], "title": titles[i] if i < len(titles) else ""}

@@ -1126,7 +1126,7 @@ function appendAgentTranscript(chunk) {
     updateBubbleText(agentLiveBubble, displayText, true);
 
     if (agentTranscriptTimer) clearTimeout(agentTranscriptTimer);
-    agentTranscriptTimer = setTimeout(flushAgentTranscript, 1000);
+    agentTranscriptTimer = setTimeout(flushAgentTranscript, 3000);
 }
 
 function flushAgentTranscript() {
