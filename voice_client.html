@@ -1031,10 +1031,27 @@ function updateBubbleText(bubble, text, rich) {
     if (!bubble) return;
     const b = bubble.querySelector('.msg-body');
     if (b) {
-        if (rich) {
-            b.innerHTML = renderRichText(text);
+        // Preserve any existing media-grid (images) — only update/replace text content
+        var existingGrid = b.querySelector('.media-grid');
+        if (existingGrid) {
+            // Find or create a text container after the grid
+            var textContainer = b.querySelector('.msg-text-content');
+            if (!textContainer) {
+                textContainer = document.createElement('div');
+                textContainer.className = 'msg-text-content';
+                b.appendChild(textContainer);
+            }
+            if (rich) {
+                textContainer.innerHTML = renderRichText(text);
+            } else {
+                textContainer.textContent = text;
+            }
         } else {
-            b.textContent = text;
+            if (rich) {
+                b.innerHTML = renderRichText(text);
+            } else {
+                b.textContent = text;
+            }
         }
     }
     if (autoScrollEnabled) {

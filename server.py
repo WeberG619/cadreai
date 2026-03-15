@@ -80,7 +80,10 @@ async def index():
 
 @app.get("/app")
 async def app_page():
-    return FileResponse(Path(__file__).parent / "voice_client.html")
+    return FileResponse(
+        Path(__file__).parent / "voice_client.html",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @app.get("/status")
