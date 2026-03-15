@@ -1330,25 +1330,40 @@ function isSimilar(a, b) {
 
 // Detect and remove text that repeats itself: "Hello worldHello world" → "Hello world"
 function deduplicateRepeatedText(text) {
-    if (!text || text.length < 40) return text;
-    const len = text.length;
-    // Check if the second half is similar to the first half
-    for (let mid = Math.floor(len * 0.35); mid <= Math.ceil(len * 0.65); mid++) {
-        const first = text.slice(0, mid).trim();
-        const second = text.slice(mid).trim();
-        if (first && second) {
-            if (first === second) return first;
-            // Normalize and check similarity — Gemini often sends slightly different versions
-            var nf = first.toLowerCase().replace(/[^a-z0-9]/g, '');
-            var ns = second.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (nf.length > 30 && ns.length > 30) {
-                // If one starts with 80%+ of the other, keep the longer one
-                var shorter = nf.length < ns.length ? nf : ns;
-                var longer = nf.length < ns.length ? ns : nf;
-                if (longer.startsWith(shorter.slice(0, Math.floor(shorter.length * 0.8)))) {
-                    return nf.length < ns.length ? second : first;
+    if (!text || text.length < 60) return text;
+    var norm = text.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+    var words = norm.split(' ').filter(function(w) { return w.length > 3; });
+    if (words.length < 8) return text;
+    // Extract signature: meaningful words (skip common filler)
+    var skip = new Set(['this','that','with','from','have','been','will','they','their','there','about','which','would','could','should','also','just','more','some','than','into','over','only']);
+    var sig = words.filter(function(w) { return !skip.has(w); });
+    // Check if any 6-word sequence from the second half appears in the first half
+    var half = Math.floor(sig.length / 2);
+    for (var i = half; i < sig.length - 5; i++) {
+        var phrase = sig.slice(i, i + 6).join(' ');
+        var firstHalfText = sig.slice(0, half).join(' ');
+        if (firstHalfText.includes(phrase)) {
+            // Found significant overlap — keep only the second occurrence
+            // Find where the repeat starts in the original text
+            var searchWords = sig.slice(i, i + 4);
+            var pattern = searchWords.join('.*?');
+            try {
+                var re = new RegExp(pattern, 'i');
+                // Find the SECOND occurrence by searching after position len*0.3
+                var searchStart = Math.floor(text.length * 0.3);
+                var secondPart = text.substring(searchStart);
+                var match = secondPart.match(re);
+                if (match) {
+                    var cutPoint = searchStart + match.index;
+                    // Walk back to find a clean sentence boundary
+                    var bounded = text.lastIndexOf('. ', cutPoint);
+                    if (bounded > searchStart - 20 && bounded < cutPoint) cutPoint = bounded + 2;
+                    return text.substring(cutPoint).trim();
                 }
-            }
+            } catch(e) {}
+            // Fallback: just return second half of text
+            var midPoint = text.indexOf('. ', Math.floor(text.length * 0.35));
+            if (midPoint > 0) return text.substring(midPoint + 2).trim();
         }
     }
     return text;
