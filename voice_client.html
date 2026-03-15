@@ -1943,9 +1943,16 @@ function connectWebSocket() {
         } else {
             document.getElementById('micStatus').textContent = `Reconnecting...`;
             // Auto-reconnect after abnormal disconnect (1006, etc.)
-            setTimeout(() => {
+            setTimeout(async () => {
                 console.log('[cadre] Auto-reconnecting after code', ev.code);
-                connectWebSocket();
+                // Create fresh session — old one is likely gone (container restart)
+                try {
+                    await createSession();
+                    connectWebSocket();
+                } catch (e) {
+                    document.getElementById('micStatus').textContent = 'Reconnect failed';
+                    console.error('[cadre] Reconnect error:', e);
+                }
             }, 2000);
         }
     };
@@ -1957,9 +1964,8 @@ async function toggleMic() {
     if (!isRecording) {
         try {
             document.getElementById('micStatus').textContent = 'Connecting...';
-            // Try to resume existing session, otherwise create fresh
-            const resumed = await tryResumeSession();
-            if (!resumed) await createSession();
+            // Always create fresh session for reliability
+            await createSession();
             if (!audioContext) await startAudio();
             // Close any stale WebSocket before opening a new one
             if (ws) {
@@ -2004,8 +2010,8 @@ async function sendTextMessage() {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         try {
             document.getElementById('micStatus').textContent = 'Connecting...';
-            const resumed = await tryResumeSession();
-            if (!resumed) await createSession();
+            // Always create fresh session for reliability (avoids stale session errors)
+            await createSession();
             // Don't start audio/mic for text-only — just need WebSocket
             if (ws) { ws.onclose = null; ws.onerror = null; ws.close(); ws = null; }
             connectWebSocket();
