@@ -1330,13 +1330,26 @@ function isSimilar(a, b) {
 
 // Detect and remove text that repeats itself: "Hello worldHello world" → "Hello world"
 function deduplicateRepeatedText(text) {
-    if (!text || text.length < 10) return text;
+    if (!text || text.length < 40) return text;
     const len = text.length;
-    // Check if the second half is the same as the first half (with minor length differences)
-    for (let mid = Math.floor(len * 0.4); mid <= Math.ceil(len * 0.6); mid++) {
+    // Check if the second half is similar to the first half
+    for (let mid = Math.floor(len * 0.35); mid <= Math.ceil(len * 0.65); mid++) {
         const first = text.slice(0, mid).trim();
         const second = text.slice(mid).trim();
-        if (first && second && first === second) return first;
+        if (first && second) {
+            if (first === second) return first;
+            // Normalize and check similarity — Gemini often sends slightly different versions
+            var nf = first.toLowerCase().replace(/[^a-z0-9]/g, '');
+            var ns = second.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (nf.length > 30 && ns.length > 30) {
+                // If one starts with 80%+ of the other, keep the longer one
+                var shorter = nf.length < ns.length ? nf : ns;
+                var longer = nf.length < ns.length ? ns : nf;
+                if (longer.startsWith(shorter.slice(0, Math.floor(shorter.length * 0.8)))) {
+                    return nf.length < ns.length ? second : first;
+                }
+            }
+        }
     }
     return text;
 }
@@ -1820,6 +1833,10 @@ function connectWebSocket() {
                 toolInProgress = true;  // Suppress text while tool runs
                 // Cancel pending bubble creation timer
                 if (agentPendingTimer) { clearTimeout(agentPendingTimer); agentPendingTimer = null; }
+                // Save pre-tool text so we can detect if the model repeats it after tool_response
+                if (agentTranscriptBuffer.trim()) {
+                    lastFinalizedAgentText = agentTranscriptBuffer.trim();
+                }
                 // Remove thinking/reasoning text — users don't need to see internal model deliberation
                 if (agentLiveBubble) {
                     var wrapper = agentLiveBubble.closest('.msg-wrapper');
