@@ -1091,6 +1091,11 @@ function appendAgentTranscript(chunk) {
         if (userLiveBubble) flushUserTranscript();
         const test = (agentTranscriptBuffer + chunk).trim();
         if (lastFinalizedAgentText && isSimilar(test, lastFinalizedAgentText)) return;
+        // Skip if new chunk is a prefix/substring of last finalized text (Gemini re-sends thinking)
+        const normChunk = chunk.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normLast = lastFinalizedAgentText.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normLast && normChunk.length > 10 && normLast.startsWith(normChunk)) return;
+        if (normLast && normChunk.length > 10 && normLast.includes(normChunk.slice(0, Math.min(60, normChunk.length)))) return;
         agentLiveBubble = createBubble('agent');
         agentTurnHasAudio = false; // reset for this turn
         currentTurnSources = []; // reset sources for new turn
@@ -2284,11 +2289,25 @@ let autoScrollEnabled = true;
 
 (function setupAutoScroll() {
     var conv = document.getElementById('conversation');
+    // Only disable auto-scroll on explicit user scroll-up (large threshold)
+    var userScrolling = false;
     conv.addEventListener('scroll', function() {
-        var atBottom = conv.scrollHeight - conv.scrollTop - conv.clientHeight < 80;
+        if (userScrolling) return;
+        var atBottom = conv.scrollHeight - conv.scrollTop - conv.clientHeight < 200;
         autoScrollEnabled = atBottom;
         document.getElementById('scrollToBottomBtn').style.display = atBottom ? 'none' : 'flex';
     });
+    // Detect intentional user scroll (mousewheel/touch up)
+    conv.addEventListener('wheel', function(e) {
+        if (e.deltaY < 0) { autoScrollEnabled = false; } // scrolling up
+    });
+    // MutationObserver: auto-scroll whenever new content is added
+    var observer = new MutationObserver(function() {
+        if (autoScrollEnabled) {
+            conv.scrollTop = conv.scrollHeight;
+        }
+    });
+    observer.observe(conv, { childList: true, subtree: true, characterData: true });
 })();
 
 function scrollToBottom() {
