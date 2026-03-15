@@ -994,6 +994,7 @@ let audioChunksReceived = 0;
 let displayedImageUrls = new Set();  // Track URLs already shown via displayImages
 let lastImageBubble = null;  // Track last image bubble for merging response text
 let toolInProgress = false;  // Suppress text while tool is running
+let toolResponseTime = 0;    // Timestamp of last tool response
 
 function ensureEmptyStateRemoved() {
     const e = document.getElementById('emptyState');
@@ -1108,11 +1109,12 @@ function isThinkingText(text) {
     // Detect Gemini's internal reasoning/planning that should not be shown to users
     // Strip markdown formatting before checking
     var t = text.trim().replace(/\*\*/g, '').replace(/^#+\s*/gm, '').toLowerCase();
-    if (/^(initiating|addressing|analyzing|processing|searching|fetching|looking up|retrieving)\s/i.test(t)) return true;
-    if (/^(i'm starting|i've decided|i'll use|i'll leverage|i'll call|i'll invoke|i'll search|i'll look|my plan is|i need to|let me use|let me call|let me search|let me look|my current focus)/i.test(t)) return true;
-    if (/\b(tool to find|function call|tool call|image_search|web_search|google_search|search tool)\b/i.test(t)) return true;
-    if (/\b(markdown format|following format|display each image|format the image|present these images|present them using|provide the user with)\b/i.test(t)) return true;
-    if (/\b(search query is set to|using the default number|next step will be to format|retrieve the images)\b/i.test(t)) return true;
+    // Bold title headers that indicate thinking (e.g., "Locating Taj Mahal Images")
+    if (/^(locating|initiating|addressing|analyzing|processing|searching|fetching|looking up|retrieving|preparing|finding|gathering|executing)\s/i.test(t)) return true;
+    if (/^(i'm (starting|initiating|going|looking|searching|using|calling)|i've decided|i'll (use|leverage|call|invoke|search|look)|my plan is|i need to|let me (use|call|search|look)|my current focus)/i.test(t)) return true;
+    if (/\b(tool to find|function call|tool call|image_search|web_search|google_search|search tool|the .* tool)\b/i.test(t)) return true;
+    if (/\b(markdown format|following format|display each image|format the image|present these images|present them using|provide the user with|render the results|image links using)\b/i.test(t)) return true;
+    if (/\b(search query|result count|default number|next step will be|retrieve the images|stick with the default)\b/i.test(t)) return true;
     return false;
 }
 
@@ -1796,7 +1798,9 @@ function connectWebSocket() {
 
             // ── Edge TTS audio from server ──
             if (data._cadre_tts && data._cadre_tts.audio && !interrupted) {
-                if (agentLiveBubble) flushAgentTranscript(); // Finalize text before TTS plays
+                // Don't flush if we just got a tool response (text still streaming in)
+                var sinceToolResponse = Date.now() - toolResponseTime;
+                if (agentLiveBubble && sinceToolResponse > 5000) flushAgentTranscript();
                 console.log('[cadre] Edge TTS received:', data._cadre_tts.text);
                 playEdgeTTS(data._cadre_tts.audio);
             }
@@ -1827,6 +1831,7 @@ function connectWebSocket() {
             }
             if (data._cadre_event === 'tool_response' && data._cadre_tool) {
                 toolInProgress = false;  // Tool done, allow text again
+                toolResponseTime = Date.now();  // Track when tool response arrived
                 completeToolCall(data._cadre_tool.name);
             }
 
