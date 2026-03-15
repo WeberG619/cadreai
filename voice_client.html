@@ -1106,12 +1106,13 @@ function flushUserTranscript() {
 // ── Agent transcript ─────────────────────────────────────────
 function isThinkingText(text) {
     // Detect Gemini's internal reasoning/planning that should not be shown to users
-    var t = text.trim().toLowerCase();
+    // Strip markdown formatting before checking
+    var t = text.trim().replace(/\*\*/g, '').replace(/^#+\s*/gm, '').toLowerCase();
     if (/^(initiating|addressing|analyzing|processing|searching|fetching|looking up|retrieving)\s/i.test(t)) return true;
-    if (/^(i've decided|i'll use|i'll leverage|i'll call|i'll invoke|i'll search|i'll look|my plan is|i need to|let me use|let me call|let me search|let me look)/i.test(t)) return true;
-    if (/\b(tool to find|function call|tool call|image_search|web_search|google_search)\b/i.test(t)) return true;
-    if (/\b(markdown format|following format|display each image|format the image|present these images)\b/i.test(t)) return true;
-    if (/\b(search query is set to|using the default number|next step will be to format)\b/i.test(t)) return true;
+    if (/^(i'm starting|i've decided|i'll use|i'll leverage|i'll call|i'll invoke|i'll search|i'll look|my plan is|i need to|let me use|let me call|let me search|let me look|my current focus)/i.test(t)) return true;
+    if (/\b(tool to find|function call|tool call|image_search|web_search|google_search|search tool)\b/i.test(t)) return true;
+    if (/\b(markdown format|following format|display each image|format the image|present these images|present them using|provide the user with)\b/i.test(t)) return true;
+    if (/\b(search query is set to|using the default number|next step will be to format|retrieve the images)\b/i.test(t)) return true;
     return false;
 }
 
@@ -1134,6 +1135,16 @@ function appendAgentTranscript(chunk) {
     if (!chunk || !chunk.trim()) return;
     // Suppress text while a tool is in progress
     if (toolInProgress) return;
+    // Strip markdown images that were already displayed via displayImages grid
+    if (displayedImageUrls.size > 0) {
+        chunk = chunk.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)\n?/g, function(m, a, url) {
+            return displayedImageUrls.has(url) ? '' : m;
+        });
+        chunk = chunk.replace(/(https?:\/\/[^\s"'<]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s"'<]*)?)\n?/gi, function(m, url) {
+            return displayedImageUrls.has(url) ? '' : m;
+        });
+        if (!chunk.trim()) return;
+    }
     // Check both the chunk alone AND the accumulated buffer for thinking patterns
     var testText = agentTranscriptBuffer ? (agentTranscriptBuffer + chunk).trim() : chunk.trim();
     if (isThinkingText(chunk) || isThinkingText(testText)) {
