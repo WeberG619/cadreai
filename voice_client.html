@@ -1116,8 +1116,13 @@ function flushUserTranscript() {
             turnStartTimer = null;
             if (!turnTextAllowed) {
                 turnTextAllowed = true;
-                // Flush any buffered direct-answer text
+                // Flush any buffered direct-answer text (filter out thinking lines)
                 if (agentTranscriptBuffer.trim() && !agentLiveBubble) {
+                    // Filter thinking text from buffered content
+                    var lines = agentTranscriptBuffer.split('\n');
+                    var filtered = lines.filter(function(l) { return !isThinkingText(l); }).join('\n');
+                    agentTranscriptBuffer = filtered;
+                    if (!agentTranscriptBuffer.trim()) return;
                     agentLiveBubble = createBubble('agent');
                     agentTurnHasAudio = false;
                     currentTurnSources = [];
@@ -1181,6 +1186,12 @@ function appendAgentTranscript(chunk) {
         agentTranscriptBuffer += chunk;
         return;
     }
+    // Filter out thinking/reasoning lines from Gemini (planning, tool references, etc.)
+    // Process line-by-line so we keep useful content mixed with thinking text
+    var chunkLines = chunk.split('\n');
+    var cleanLines = chunkLines.filter(function(l) { return !l.trim() || !isThinkingText(l); });
+    chunk = cleanLines.join('\n');
+    if (!chunk.trim()) return;
     // ALWAYS strip image markdown/URLs from text — images only display via grid
     chunk = chunk.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)\n?/g, '');
     chunk = chunk.replace(/(https?:\/\/[^\s"'<]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s"'<]*)?)\n?/gi, '');
@@ -1357,7 +1368,6 @@ function deduplicateRepeatedText(text) {
     var pos = n.indexOf(fingerprint, searchStart);
     if (pos > 0) {
         // Found duplication! Map back to original text position.
-        // Count non-normalized chars to find the approximate cut point.
         var ratio = pos / n.length;
         var origCut = Math.floor(text.length * ratio);
         // Find a clean sentence boundary near origCut
@@ -1372,6 +1382,19 @@ function deduplicateRepeatedText(text) {
             return text.substring(0, bestBreak).trim();
         }
         return text.substring(0, origCut).trim();
+    }
+    // Sentence-level dedup: if the last sentence repeats an earlier one, remove it
+    var sentences = text.split(/(?<=[.!?])\s+/);
+    if (sentences.length >= 3) {
+        var seen = {};
+        var unique = [];
+        for (var si = 0; si < sentences.length; si++) {
+            var key = norm(sentences[si]);
+            if (key.length > 20 && seen[key]) continue; // skip duplicate sentence
+            seen[key] = true;
+            unique.push(sentences[si]);
+        }
+        if (unique.length < sentences.length) return unique.join(' ');
     }
     return text;
 }
