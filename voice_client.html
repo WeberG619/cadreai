@@ -1104,62 +1104,72 @@ function flushUserTranscript() {
 }
 
 // ── Agent transcript ─────────────────────────────────────────
+function isThinkingText(text) {
+    // Detect Gemini's internal reasoning/planning that should not be shown to users
+    var t = text.trim().toLowerCase();
+    if (/^(initiating|addressing|analyzing|processing|searching|fetching|looking up|retrieving)\s/i.test(t)) return true;
+    if (/^(i've decided to|i'll (use|leverage|call|invoke|search|look)|my plan is to|i need to|let me (use|call|search|look))/i.test(t)) return true;
+    if (/\b(tool to find|function call|tool call|image_search|web_search|google_search)\b/i.test(t)) return true;
+    if (/\b(markdown format|following format|display each image)\b/i.test(t)) return true;
+    return false;
+}
+
+function stripSuggestionsAndMeta(text) {
+    // Strip [SUGGESTIONS:...] tags — full tags, partial, and pipe-separated remnants
+    var s = text;
+    s = s.replace(/\[SUGGESTIONS:[^\]]*\]/gi, '');
+    s = s.replace(/\[SUGGESTIONS:[^\]]*$/gi, '');
+    // Strip pipe-separated suggestion remnants: | Suggestion text | Another suggestion]
+    s = s.replace(/(\|\s*[^|.\n]{3,}){2,}\]?/g, '');
+    // Partial closing tag remnants
+    s = s.replace(/^[^\[]*?\]\s*/g, function(m) { return m.length < 80 && !m.includes('.') ? '' : m; });
+    // Display instructions
+    s = s.replace(/DISPLAY each image using:.*$/gm, '');
+    s = s.replace(/!\[title\]\(image_url\)/g, '');
+    return s.trim();
+}
+
 function appendAgentTranscript(chunk) {
     if (!chunk || !chunk.trim()) return;
-    // Suppress thinking text while a tool is in progress
+    // Suppress text while a tool is in progress
     if (toolInProgress) return;
+    // Suppress thinking/reasoning text (arrives before tool_call event)
+    if (isThinkingText(chunk)) {
+        toolInProgress = true;  // Pre-emptively suppress further thinking
+        return;
+    }
 
     if (!agentLiveBubble) {
         if (userLiveBubble) flushUserTranscript();
-        const test = (agentTranscriptBuffer + chunk).trim();
+        var test = (agentTranscriptBuffer + chunk).trim();
         if (lastFinalizedAgentText && isSimilar(test, lastFinalizedAgentText)) return;
-        // Skip if new chunk is a prefix/substring of last finalized text (Gemini re-sends thinking)
-        const normChunk = chunk.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-        const normLast = lastFinalizedAgentText.toLowerCase().replace(/[^a-z0-9]/g, '');
+        var normChunk = chunk.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        var normLast = lastFinalizedAgentText.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (normLast && normChunk.length > 10 && normLast.startsWith(normChunk)) return;
         if (normLast && normChunk.length > 10 && normLast.includes(normChunk.slice(0, Math.min(60, normChunk.length)))) return;
         agentLiveBubble = createBubble('agent');
-        agentTurnHasAudio = false; // reset for this turn
-        currentTurnSources = []; // reset sources for new turn
+        agentTurnHasAudio = false;
+        currentTurnSources = [];
         setGenerating(true);
     }
 
-    const trimmedChunk = chunk.trim();
-    const trimmedBuffer = agentTranscriptBuffer.trim();
+    var trimmedChunk = chunk.trim();
+    var trimmedBuffer = agentTranscriptBuffer.trim();
 
-    // Cumulative detection: new chunk contains or extends what we already have
     if (trimmedBuffer && trimmedChunk.startsWith(trimmedBuffer)) {
-        // Cumulative — replace buffer with the longer version
         agentTranscriptBuffer = chunk;
     } else if (trimmedBuffer && trimmedBuffer.startsWith(trimmedChunk)) {
-        // Duplicate/subset of what we have — ignore
         return;
     } else if (trimmedBuffer && trimmedChunk === trimmedBuffer) {
-        // Exact duplicate — ignore
         return;
     } else {
-        // Incremental new text — append
         agentTranscriptBuffer += chunk;
     }
 
     agentTranscriptBuffer = deduplicateRepeatedText(agentTranscriptBuffer.trim());
-    // Strip [SUGGESTIONS:...] tags (complete or partial) and display instructions
-    let displayText = agentTranscriptBuffer;
-    // Full tag: [SUGGESTIONS: ... ]
-    displayText = displayText.replace(/\[SUGGESTIONS:[^\]]*\]/gi, '');
-    // Partial opening tag at end (still streaming): [SUGGESTIONS: ...
-    displayText = displayText.replace(/\[SUGGESTIONS:[^\]]*$/gi, '');
-    // Partial closing tag at start (leftover from split): ...specs] or similar
-    displayText = displayText.replace(/^[^\[]*?\]\s*/g, function(match) {
-        // Only strip if it looks like a tag remnant (short, no sentences)
-        return match.length < 80 && !match.includes('.') ? '' : match;
-    });
-    displayText = displayText.replace(/DISPLAY each image using:.*$/gm, '').trim();
+    var displayText = stripSuggestionsAndMeta(agentTranscriptBuffer);
     updateBubbleText(agentLiveBubble, displayText, true);
 
-    // Don't auto-flush on a short timer — Gemini thinking model streams tokens
-    // with long pauses. Flush happens when: new user message, displayImages,
-    // new tool call, or a long 15s silence (safety net).
     if (agentTranscriptTimer) clearTimeout(agentTranscriptTimer);
     agentTranscriptTimer = setTimeout(flushAgentTranscript, 15000);
 }
@@ -1778,7 +1788,7 @@ function connectWebSocket() {
                     if (wrapper) wrapper.remove();
                     agentLiveBubble = null;
                     agentTranscriptBuffer = '';
-                    lastFinalizedAgentText = '';
+                    // Keep lastFinalizedAgentText for dedup — don't clear it
                     if (agentTranscriptTimer) { clearTimeout(agentTranscriptTimer); agentTranscriptTimer = null; }
                     setGenerating(false);
                 }
