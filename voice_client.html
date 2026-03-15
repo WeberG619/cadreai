@@ -1328,45 +1328,36 @@ function isSimilar(a, b) {
     return false;
 }
 
-// Detect and remove text that repeats itself: "Hello worldHello world" → "Hello world"
+// Detect and remove text that repeats itself (Gemini 2.5 sends text before AND after tool calls)
 function deduplicateRepeatedText(text) {
     if (!text || text.length < 60) return text;
-    var norm = text.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
-    var words = norm.split(' ').filter(function(w) { return w.length > 3; });
-    if (words.length < 8) return text;
-    // Extract signature: meaningful words (skip common filler)
-    var skip = new Set(['this','that','with','from','have','been','will','they','their','there','about','which','would','could','should','also','just','more','some','than','into','over','only']);
-    var sig = words.filter(function(w) { return !skip.has(w); });
-    // Check if any 6-word sequence from the second half appears in the first half
-    var half = Math.floor(sig.length / 2);
-    for (var i = half; i < sig.length - 5; i++) {
-        var phrase = sig.slice(i, i + 6).join(' ');
-        var firstHalfText = sig.slice(0, half).join(' ');
-        if (firstHalfText.includes(phrase)) {
-            // Found significant overlap — keep only the second occurrence
-            // Find where the repeat starts in the original text
-            var searchWords = sig.slice(i, i + 4);
-            var pattern = searchWords.join('.*?');
-            try {
-                var re = new RegExp(pattern, 'i');
-                // Find the SECOND occurrence by searching after position len*0.3
-                var searchStart = Math.floor(text.length * 0.3);
-                var secondPart = text.substring(searchStart);
-                var match = secondPart.match(re);
-                if (match) {
-                    var cutPoint = searchStart + match.index;
-                    // Walk back to find a clean sentence boundary
-                    var bounded = text.lastIndexOf('. ', cutPoint);
-                    if (bounded > searchStart - 20 && bounded < cutPoint) cutPoint = bounded + 2;
-                    return text.substring(cutPoint).trim();
-                }
-            } catch(e) {}
-            // Fallback: just return second half of text
-            var midPoint = text.indexOf('. ', Math.floor(text.length * 0.35));
-            if (midPoint > 0) return text.substring(midPoint + 2).trim();
+    // Split on '. ' followed by uppercase letter
+    var sentences = text.split(/\.\s+(?=[A-Z])/).map(function(s, i, arr) {
+        return i < arr.length - 1 ? s + '.' : s;
+    }).filter(function(s) { return s.trim().length > 15; });
+    if (sentences.length < 2) return text;
+    function norm(s) { return s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim(); }
+    var seen = {};
+    var result = [];
+    for (var i = 0; i < sentences.length; i++) {
+        var n = norm(sentences[i]);
+        var key = n.substring(0, 40);
+        if (key.length < 15) { result.push(sentences[i]); continue; }
+        if (seen[key]) break;
+        seen[key] = true;
+        result.push(sentences[i]);
+    }
+    var out = result.join(' ').trim();
+    // Trim trailing garbage after last proper sentence ending
+    var lastGoodEnd = Math.max(out.lastIndexOf('. '), out.lastIndexOf('."'), out.lastIndexOf('.)'));
+    if (lastGoodEnd === -1) lastGoodEnd = out.lastIndexOf('.');
+    if (lastGoodEnd > out.length * 0.5) {
+        var afterEnd = out.substring(lastGoodEnd + 1).trim();
+        if (afterEnd && /^[a-z.0-9]/.test(afterEnd)) {
+            out = out.substring(0, lastGoodEnd + 1).trim();
         }
     }
-    return text;
+    return out;
 }
 
 // ── Rich Text Rendering (agent bubbles) ─────────────────────
