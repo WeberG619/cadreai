@@ -840,7 +840,7 @@
                     <span class="cap-tag" onclick="submitSuggestion(this)">Give me a market overview</span>
                     <span class="cap-tag" onclick="submitSuggestion(this)">What's the latest AI news?</span>
                     <span class="cap-tag" onclick="submitSuggestion(this)">Analyze my screen</span>
-                    <span class="cap-tag" onclick="submitSuggestion(this)">Show me a stock chart for NVDA</span>
+                    <span class="cap-tag" onclick="submitSuggestion(this)">Compare NVDA and AMD stocks</span>
                     <span class="cap-tag" onclick="submitSuggestion(this)">What can you do?</span>
                 </div>
             </div>
@@ -998,6 +998,7 @@ let toolResponseTime = 0;    // Timestamp of last tool response
 let agentPendingTimer = null; // Delay before creating bubble (thinking detection)
 let turnTextAllowed = false;  // Structural flag: only allow text after tool_response or 2s timeout
 let turnStartTimer = null;    // Timer to allow text if no tool_call arrives
+let turnHasTranscription = false;  // True once outputTranscription arrives this turn — suppresses part.text
 
 function ensureEmptyStateRemoved() {
     const e = document.getElementById('emptyState');
@@ -1107,6 +1108,7 @@ function flushUserTranscript() {
         lastFinalizedUserText = userTranscriptBuffer.trim();
         // ── New turn starting: suppress agent text until tool flow is resolved ──
         turnTextAllowed = false;
+        turnHasTranscription = false;
         toolInProgress = false;
         agentTranscriptBuffer = '';
         if (turnStartTimer) clearTimeout(turnStartTimer);
@@ -1916,18 +1918,19 @@ function connectWebSocket() {
                             audioMode = true;
                             playAudioChunk(part.inlineData.data);
                         }
-                        // IMPORTANT: Do NOT use part.text for display.
-                        // part.text contains model thinking/reasoning AND answers,
-                        // causing thinking text leakage and answer duplication.
-                        // Use outputTranscription exclusively — it only contains
-                        // what the model actually speaks (clean answer, no thinking).
+                        // Use part.text ONLY as fallback when model doesn't send audio.
+                        // If outputTranscription has been received this turn, skip part.text
+                        // (it contains thinking text + duplicate answer).
+                        if (part.text && !turnHasTranscription && !audioMode) {
+                            appendAgentTranscript(part.text);
+                        }
                     }
                 }
 
                 // Output transcription: what the agent said (text version of audio)
-                // This is the ONLY text source — it contains only spoken answer text,
-                // never thinking/reasoning. Streams token-by-token.
+                // Primary text source — clean spoken answer, no thinking text.
                 if (data.outputTranscription) {
+                    turnHasTranscription = true;
                     const text = typeof data.outputTranscription === 'string'
                         ? data.outputTranscription
                         : data.outputTranscription.text || '';
@@ -2061,11 +2064,14 @@ async function sendTextMessage() {
     agentLiveBubble = null;
     agentTranscriptBuffer = '';
     toolInProgress = false;
+    // Re-enable auto-scroll on every new message
+    autoScrollEnabled = true;
 
     // ── STRUCTURAL: Suppress all text until we know if tools are called ──
     // Text is silently buffered. If tool_call arrives, buffer is discarded.
     // If no tool_call after 2s, it's a direct answer — allow text through.
     turnTextAllowed = false;
+    turnHasTranscription = false;
     if (turnStartTimer) clearTimeout(turnStartTimer);
     turnStartTimer = setTimeout(function() {
         turnStartTimer = null;
