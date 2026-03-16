@@ -1637,7 +1637,10 @@ function resample(data, from, to) {
 }
 
 async function startAudio() {
-    audioContext = new AudioContext({ sampleRate: 48000 });
+    // Reuse existing AudioContext if available (e.g., created during text send)
+    if (!audioContext) {
+        audioContext = new AudioContext({ sampleRate: 48000 });
+    }
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const source = audioContext.createMediaStreamSource(mediaStream);
     analyser = audioContext.createAnalyser();
@@ -1704,6 +1707,11 @@ async function processPlaybackQueue() {
     if (interrupted || playbackQueue.length === 0) { isPlaying = false; currentAudioSource = null; return; }
     isPlaying = true;
     try {
+        // Auto-create AudioContext for playback if not initialized (text-only sessions)
+        if (!audioContext) {
+            console.log('[cadre] Creating AudioContext for playback (text-only mode)');
+            audioContext = new AudioContext({ sampleRate: 48000 });
+        }
         // Ensure AudioContext is active (browsers suspend without user gesture)
         if (audioContext.state === 'suspended') {
             console.log('[cadre] Resuming suspended AudioContext');
@@ -1732,8 +1740,18 @@ async function processPlaybackQueue() {
         src.buffer = buf;
         src.connect(audioContext.destination);
         currentAudioSource = src;
-        src.onended = () => { currentAudioSource = null; processPlaybackQueue(); };
+        src.onended = () => {
+            currentAudioSource = null;
+            if (playbackQueue.length === 0) {
+                isPlaying = false;
+                if (isRecording) {
+                    document.getElementById('micStatus').textContent = 'Listening...';
+                }
+            }
+            processPlaybackQueue();
+        };
         src.start();
+        document.getElementById('micStatus').textContent = 'Cadre is speaking...';
         console.log(`[cadre] Playing ${f32.length} samples (${(f32.length/24000).toFixed(2)}s) | queue: ${playbackQueue.length} | ctx: ${audioContext.state}`);
     } catch (e) {
         console.error('[cadre] Playback error:', e);
@@ -2051,7 +2069,8 @@ async function toggleMic() {
             document.getElementById('micStatus').textContent = 'Connecting...';
             // Always create fresh session for reliability
             await createSession();
-            if (!audioContext) await startAudio();
+            // Always start audio for mic (need mic stream + analyser even if AudioContext exists)
+            if (!mediaStream) await startAudio();
             // Close any stale WebSocket before opening a new one
             if (ws) {
                 ws.onclose = null;  // prevent the onclose handler from firing
@@ -2121,6 +2140,15 @@ async function sendTextMessage() {
 
     // Clear interrupt flag — new user input
     interrupted = false;
+
+    // Ensure AudioContext exists for playback (must happen during user gesture for autoplay policy)
+    if (!audioContext) {
+        audioContext = new AudioContext({ sampleRate: 48000 });
+        console.log('[cadre] Created AudioContext during send gesture');
+    }
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
 
     // Reset agent bubble so the next response creates a fresh bubble
     agentLiveBubble = null;
