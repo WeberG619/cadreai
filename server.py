@@ -659,6 +659,8 @@ async def run_live(
 
                     # Log events
                     event_types = []
+                    has_text_part = False
+                    text_part_content = ""
                     if "content" in data and data["content"] and "parts" in data["content"]:
                         for part in data["content"]["parts"]:
                             if "inlineData" in part:
@@ -672,15 +674,26 @@ async def run_live(
                                     transcript_buffer = ""
                             if "text" in part:
                                 event_types.append(f"TEXT:{part['text'][:60]}")
+                                has_text_part = True
+                                text_part_content += part["text"]
                             if "functionCall" in part:
                                 event_types.append(f"TOOL_CALL:{part['functionCall'].get('name','?')}")
                             if "functionResponse" in part:
                                 event_types.append(f"TOOL_RESP:{part['functionResponse'].get('name','?')}")
 
-                    # Accumulate outputTranscription for TTS (only if model isn't sending native audio)
+                    # Accumulate text for TTS — from outputTranscription OR part.text
+                    # (native audio model sends outputTranscription; text fallback sends part.text)
+                    tts_source_text = ""
                     if "outputTranscription" in data and not has_native_audio:
                         ot = data["outputTranscription"]
-                        chunk_text = ot if isinstance(ot, str) else (ot.get("text", "") if isinstance(ot, dict) else str(ot))
+                        tts_source_text = ot if isinstance(ot, str) else (ot.get("text", "") if isinstance(ot, dict) else str(ot))
+                    elif has_text_part and not has_native_audio and "outputTranscription" not in data:
+                        # Model responded with text only (no audio) — use part.text for TTS
+                        tts_source_text = text_part_content
+                        print(f"[tts] Using part.text for TTS (no audio/transcription): {tts_source_text[:60]}", flush=True)
+
+                    if tts_source_text.strip() and not has_native_audio:
+                        chunk_text = tts_source_text
                         if chunk_text.strip():
                             ct = chunk_text.strip()
                             nct = normalize(ct)
