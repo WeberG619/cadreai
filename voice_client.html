@@ -2052,26 +2052,21 @@ function connectWebSocket() {
 
             // Skip audio/text processing if interrupted
             if (!interrupted) {
-                // Gemini native audio + text parts
+                // Gemini native audio chunks
                 if (data.content && data.content.parts) {
                     for (const part of data.content.parts) {
                         if (part.inlineData && part.inlineData.data) {
                             audioMode = true;
                             playAudioChunk(part.inlineData.data);
                         }
-                        // Use part.text ONLY as fallback when model doesn't send audio.
-                        // If outputTranscription has been received this turn, skip part.text
-                        // (it contains thinking text + duplicate answer).
-                        if (part.text && !turnHasTranscription && !audioMode) {
-                            appendAgentTranscript(part.text);
-                        }
+                        // part.text is NOT displayed — native audio model sends
+                        // thinking/reasoning text in parts that causes duplication.
+                        // outputTranscription is the sole authoritative text source.
                     }
                 }
 
                 // Output transcription: what the agent said (text version of audio)
-                // Primary text source — clean spoken answer, no thinking text.
-                // outputTranscription is CUMULATIVE — each message has full text so far.
-                // Use replaceAgentTranscript to avoid duplication.
+                // This is the ONLY text source — cumulative (full text so far each msg).
                 if (data.outputTranscription) {
                     turnHasTranscription = true;
                     const text = typeof data.outputTranscription === 'string'
