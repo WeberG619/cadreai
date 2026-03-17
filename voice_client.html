@@ -1642,6 +1642,9 @@ async function startAudio() {
     if (!audioContext) {
         audioContext = new AudioContext({ sampleRate: 48000 });
     }
+    if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+    }
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const source = audioContext.createMediaStreamSource(mediaStream);
     analyser = audioContext.createAnalyser();
